@@ -153,7 +153,7 @@ import Foreign.Ptr
 #starttype struct fi_eq_cm_entry
 #field fid , <fid_t>
 #field info , Ptr <struct fi_info>
-#array_field data , CUChar
+#field data , Ptr CUChar
 #stoptype
 {- struct fi_ops_eq {
     size_t size;
