@@ -13,12 +13,10 @@ import XLibfabric.RDMA.FiErrno
 #num FI_NAME_MAX
 #num FI_VERSION_MAX
 #ccall fi_version , IO CUInt
-{-
 {- struct fid; -}
-#opaque_t struct fid
+-- #opaque_t struct fid
 {- struct fid_fabric; -}
-#opaque_t struct fid_fabric
--}
+-- #opaque_t struct fid_fabric
 {- struct fid_domain; -}
 #opaque_t struct fid_domain
 {- struct fid_av; -}
@@ -42,12 +40,12 @@ import XLibfabric.RDMA.FiErrno
 {- struct fid_mr; -}
 #opaque_t struct fid_mr
 {- struct fid_nic; -}
-{-
-#opaque_t struct fid_nic
+-- #opaque_t struct fid_nic
+-- #globalvar fid_t , Ptr (<struct fid>)
+#synonym_t fid_t , Ptr (<struct fid>)
 {- struct fi_ioc {
     void * addr; size_t count;
 }; -}
--}
 #starttype struct fi_ioc
 #field addr , Ptr ()
 #field count , CSize
@@ -540,9 +538,6 @@ import XLibfabric.RDMA.FiErrno
 #ccall fi_freeinfo , Ptr <struct fi_info> -> IO ()
 #ccall fi_dupinfo , Ptr <struct fi_info> -> IO (Ptr <struct fi_info>)
 #cinline fi_allocinfo , IO (Ptr <struct fi_info>)
-
-#globalvar fid_t , Ptr (<struct fid>)
-
 {- struct fi_ops_fabric {
     size_t size;
     int (* domain)(struct fid_fabric * fabric,

@@ -2,10 +2,10 @@
 #include <bindings.dsl.h>
 #include <rdma/fi_domain.h>
 module XLibfabric.RDMA.FiDomain where
-import XLibfabric.RDMA.FiEq
-import XLibfabric.RDMA.Fabric
+import XLibfabric.RDMA.FiEq hiding (C'fi_cntr_attr, C'fi_cq_attr)
+import XLibfabric.RDMA.Fabric hiding (C'fid_cntr, C'fid_cq, C'fid_eq, C'fi_eq_attr, C'fid_poll, C'fid_wait, C'fi_wait_attr, C'fid_av, C'fid_domain, C'fid_mr)
 import Foreign.Ptr
-import System.Posix.Types.Iovec
+import Common
 #strict_import
 
 {- struct fi_av_attr {
@@ -133,7 +133,7 @@ import System.Posix.Types.Iovec
     } device;
 }; -}
 #starttype struct fi_mr_attr
-#field mr_iov , Ptr <struct CIovec>
+#field mr_iov , Ptr <struct iovec>
 #field iov_count , CSize
 #field access , CULong
 #field offset , CULong
@@ -172,8 +172,8 @@ import System.Posix.Types.Iovec
 }; -}
 #starttype struct fi_hmem_override_ops
 #field size , CSize
-#field copy_from_hmem_iov , FunPtr (Ptr () -> CSize -> <enum fi_hmem_iface> -> CULong -> Ptr <struct CIovec> -> CSize -> CULong -> CLong)
-#field copy_to_hmem_iov , FunPtr (<enum fi_hmem_iface> -> CULong -> Ptr <struct CIovec> -> CSize -> CULong -> Ptr () -> CSize -> CLong)
+#field copy_from_hmem_iov , FunPtr (Ptr () -> CSize -> <enum fi_hmem_iface> -> CULong -> Ptr <struct iovec> -> CSize -> CULong -> CLong)
+#field copy_to_hmem_iov , FunPtr (<enum fi_hmem_iface> -> CULong -> Ptr <struct iovec> -> CSize -> CULong -> Ptr () -> CSize -> CLong)
 #stoptype
 {- enum fi_datatype {
     FI_INT8,
@@ -368,7 +368,7 @@ import System.Posix.Types.Iovec
 #starttype struct fi_ops_mr
 #field size , CSize
 #field reg , FunPtr (Ptr <struct fid> -> Ptr () -> CSize -> CULong -> CULong -> CULong -> CULong -> Ptr (Ptr <struct fid_mr>) -> Ptr () -> CInt)
-#field regv , FunPtr (Ptr <struct fid> -> Ptr <struct CIovec> -> CSize -> CULong -> CULong -> CULong -> CULong -> Ptr (Ptr <struct fid_mr>) -> Ptr () -> CInt)
+#field regv , FunPtr (Ptr <struct fid> -> Ptr <struct iovec> -> CSize -> CULong -> CULong -> CULong -> CULong -> Ptr (Ptr <struct fid_mr>) -> Ptr () -> CInt)
 #field regattr , FunPtr (Ptr <struct fid> -> Ptr <struct fi_mr_attr> -> CULong -> Ptr (Ptr <struct fid_mr>) -> CInt)
 #stoptype
 {- struct fid_domain {
@@ -386,7 +386,7 @@ import System.Posix.Types.Iovec
 #cinline fi_wait_open , Ptr <struct fid_fabric> -> Ptr <struct fi_wait_attr> -> Ptr (Ptr <struct fid_wait>) -> IO CInt
 #cinline fi_poll_open , Ptr <struct fid_domain> -> Ptr <struct fi_poll_attr> -> Ptr (Ptr <struct fid_poll>) -> IO CInt
 #cinline fi_mr_reg , Ptr <struct fid_domain> -> Ptr () -> CSize -> CULong -> CULong -> CULong -> CULong -> Ptr (Ptr <struct fid_mr>) -> Ptr () -> IO CInt
-#cinline fi_mr_regv , Ptr <struct fid_domain> -> Ptr <struct CIovec> -> CSize -> CULong -> CULong -> CULong -> CULong -> Ptr (Ptr <struct fid_mr>) -> Ptr () -> IO CInt
+#cinline fi_mr_regv , Ptr <struct fid_domain> -> Ptr <struct iovec> -> CSize -> CULong -> CULong -> CULong -> CULong -> Ptr (Ptr <struct fid_mr>) -> Ptr () -> IO CInt
 #cinline fi_mr_regattr , Ptr <struct fid_domain> -> Ptr <struct fi_mr_attr> -> CULong -> Ptr (Ptr <struct fid_mr>) -> IO CInt
 #cinline fi_mr_desc , Ptr <struct fid_mr> -> IO (Ptr ())
 #cinline fi_mr_key , Ptr <struct fid_mr> -> IO CULong
@@ -394,7 +394,7 @@ import System.Posix.Types.Iovec
 #cinline fi_mr_map_raw , Ptr <struct fid_domain> -> CULong -> Ptr CUChar -> CSize -> Ptr CULong -> CULong -> IO CInt
 #cinline fi_mr_unmap_key , Ptr <struct fid_domain> -> CULong -> IO CInt
 #cinline fi_mr_bind , Ptr <struct fid_mr> -> Ptr <struct fid> -> CULong -> IO CInt
-#cinline fi_mr_refresh , Ptr <struct fid_mr> -> Ptr <struct CIovec> -> CSize -> CULong -> IO CInt
+#cinline fi_mr_refresh , Ptr <struct fid_mr> -> Ptr <struct iovec> -> CSize -> CULong -> IO CInt
 #cinline fi_mr_enable , Ptr <struct fid_mr> -> IO CInt
 #cinline fi_av_open , Ptr <struct fid_domain> -> Ptr <struct fi_av_attr> -> Ptr (Ptr <struct fid_av>) -> Ptr () -> IO CInt
 #cinline fi_av_bind , Ptr <struct fid_av> -> Ptr <struct fid> -> CULong -> IO CInt

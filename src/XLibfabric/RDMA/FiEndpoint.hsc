@@ -3,10 +3,9 @@
 #include <rdma/fi_endpoint.h>
 module XLibfabric.RDMA.FiEndpoint where
 import Foreign.Ptr
-import System.Posix.Types.Iovec
-import XLibfabric.RDMA.Fabric
-import System.Posix.Types.Iovec
-import XLibfabric.RDMA.FiDomain
+import Common
+import XLibfabric.RDMA.Fabric hiding (C'fid_ep, C'fid_stx, C'fid_pep)
+import XLibfabric.RDMA.FiDomain hiding (C'fid_domain)
 #strict_import
 
 {- struct fi_msg {
@@ -18,7 +17,7 @@ import XLibfabric.RDMA.FiDomain
     uint64_t data;
 }; -}
 #starttype struct fi_msg
-#field msg_iov , Ptr <struct CIovec>
+#field msg_iov , Ptr <struct iovec>
 #field desc , Ptr (Ptr ())
 #field iov_count , CSize
 #field addr , CULong
@@ -135,10 +134,10 @@ import XLibfabric.RDMA.FiDomain
 #starttype struct fi_ops_msg
 #field size , CSize
 #field recv , FunPtr (Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> Ptr () -> CLong)
-#field recvv , FunPtr (Ptr <struct fid_ep> -> Ptr <struct CIovec> -> Ptr (Ptr ()) -> CSize -> CULong -> Ptr () -> CLong)
+#field recvv , FunPtr (Ptr <struct fid_ep> -> Ptr <struct iovec> -> Ptr (Ptr ()) -> CSize -> CULong -> Ptr () -> CLong)
 #field recvmsg , FunPtr (Ptr <struct fid_ep> -> Ptr <struct fi_msg> -> CULong -> CLong)
 #field send , FunPtr (Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> Ptr () -> CLong)
-#field sendv , FunPtr (Ptr <struct fid_ep> -> Ptr <struct CIovec> -> Ptr (Ptr ()) -> CSize -> CULong -> Ptr () -> CLong)
+#field sendv , FunPtr (Ptr <struct fid_ep> -> Ptr <struct iovec> -> Ptr (Ptr ()) -> CSize -> CULong -> Ptr () -> CLong)
 #field sendmsg , FunPtr (Ptr <struct fid_ep> -> Ptr <struct fi_msg> -> CULong -> CLong)
 #field inject , FunPtr (Ptr <struct fid_ep> -> Ptr () -> CSize -> CULong -> CLong)
 #field senddata , FunPtr (Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> CULong -> Ptr () -> CLong)
@@ -207,10 +206,10 @@ import XLibfabric.RDMA.FiDomain
 #cinline fi_stx_context , Ptr <struct fid_domain> -> Ptr <struct fi_tx_attr> -> Ptr (Ptr <struct fid_stx>) -> Ptr () -> IO CInt
 #cinline fi_srx_context , Ptr <struct fid_domain> -> Ptr <struct fi_rx_attr> -> Ptr (Ptr <struct fid_ep>) -> Ptr () -> IO CInt
 #cinline fi_recv , Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> Ptr () -> IO CLong
-#cinline fi_recvv , Ptr <struct fid_ep> -> Ptr <struct CIovec> -> Ptr (Ptr ()) -> CSize -> CULong -> Ptr () -> IO CLong
+#cinline fi_recvv , Ptr <struct fid_ep> -> Ptr <struct iovec> -> Ptr (Ptr ()) -> CSize -> CULong -> Ptr () -> IO CLong
 #cinline fi_recvmsg , Ptr <struct fid_ep> -> Ptr <struct fi_msg> -> CULong -> IO CLong
 #cinline fi_send , Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> Ptr () -> IO CLong
-#cinline fi_sendv , Ptr <struct fid_ep> -> Ptr <struct CIovec> -> Ptr (Ptr ()) -> CSize -> CULong -> Ptr () -> IO CLong
+#cinline fi_sendv , Ptr <struct fid_ep> -> Ptr <struct iovec> -> Ptr (Ptr ()) -> CSize -> CULong -> Ptr () -> IO CLong
 #cinline fi_sendmsg , Ptr <struct fid_ep> -> Ptr <struct fi_msg> -> CULong -> IO CLong
 #cinline fi_inject , Ptr <struct fid_ep> -> Ptr () -> CSize -> CULong -> IO CLong
 #cinline fi_senddata , Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> CULong -> Ptr () -> IO CLong

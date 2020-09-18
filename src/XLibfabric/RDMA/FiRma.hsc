@@ -33,7 +33,7 @@ import Foreign.Ptr
     uint64_t data;
 }; -}
 #starttype struct fi_msg_rma
-#field msg_iov , Ptr <struct CIovec>
+#field msg_iov , Ptr <struct iovec>
 #field desc , Ptr (Ptr ())
 #field iov_count , CSize
 #field addr , CULong
@@ -108,20 +108,20 @@ import Foreign.Ptr
 #starttype struct fi_ops_rma
 #field size , CSize
 #field read , FunPtr (Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> CULong -> CULong -> Ptr () -> CLong)
-#field readv , FunPtr (Ptr <struct fid_ep> -> Ptr <struct CIovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> CULong -> Ptr () -> CLong)
+#field readv , FunPtr (Ptr <struct fid_ep> -> Ptr <struct iovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> CULong -> Ptr () -> CLong)
 #field readmsg , FunPtr (Ptr <struct fid_ep> -> Ptr <struct fi_msg_rma> -> CULong -> CLong)
 #field write , FunPtr (Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> CULong -> CULong -> Ptr () -> CLong)
-#field writev , FunPtr (Ptr <struct fid_ep> -> Ptr <struct CIovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> CULong -> Ptr () -> CLong)
+#field writev , FunPtr (Ptr <struct fid_ep> -> Ptr <struct iovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> CULong -> Ptr () -> CLong)
 #field writemsg , FunPtr (Ptr <struct fid_ep> -> Ptr <struct fi_msg_rma> -> CULong -> CLong)
 #field inject , FunPtr (Ptr <struct fid_ep> -> Ptr () -> CSize -> CULong -> CULong -> CULong -> CLong)
 #field writedata , FunPtr (Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> CULong -> CULong -> CULong -> Ptr () -> CLong)
 #field injectdata , FunPtr (Ptr <struct fid_ep> -> Ptr () -> CSize -> CULong -> CULong -> CULong -> CULong -> CLong)
 #stoptype
 #cinline fi_read , Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> CULong -> CULong -> Ptr () -> IO CLong
-#cinline fi_readv , Ptr <struct fid_ep> -> Ptr <struct CIovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> CULong -> Ptr () -> IO CLong
+#cinline fi_readv , Ptr <struct fid_ep> -> Ptr <struct iovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> CULong -> Ptr () -> IO CLong
 #cinline fi_readmsg , Ptr <struct fid_ep> -> Ptr <struct fi_msg_rma> -> CULong -> IO CLong
 #cinline fi_write , Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> CULong -> CULong -> Ptr () -> IO CLong
-#cinline fi_writev , Ptr <struct fid_ep> -> Ptr <struct CIovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> CULong -> Ptr () -> IO CLong
+#cinline fi_writev , Ptr <struct fid_ep> -> Ptr <struct iovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> CULong -> Ptr () -> IO CLong
 #cinline fi_writemsg , Ptr <struct fid_ep> -> Ptr <struct fi_msg_rma> -> CULong -> IO CLong
 #cinline fi_inject_write , Ptr <struct fid_ep> -> Ptr () -> CSize -> CULong -> CULong -> CULong -> IO CLong
 #cinline fi_writedata , Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> CULong -> CULong -> CULong -> Ptr () -> IO CLong

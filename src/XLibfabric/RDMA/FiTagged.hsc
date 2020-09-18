@@ -17,7 +17,7 @@ import System.Posix.Types.Iovec
     uint64_t data;
 }; -}
 #starttype struct fi_msg_tagged
-#field msg_iov , Ptr <struct CIovec>
+#field msg_iov , Ptr <struct iovec>
 #field desc , Ptr (Ptr ())
 #field iov_count , CSize
 #field addr , CULong
@@ -87,20 +87,20 @@ import System.Posix.Types.Iovec
 #starttype struct fi_ops_tagged
 #field size , CSize
 #field recv , FunPtr (Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> CULong -> CULong -> Ptr () -> CLong)
-#field recvv , FunPtr (Ptr <struct fid_ep> -> Ptr <struct CIovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> CULong -> Ptr () -> CLong)
+#field recvv , FunPtr (Ptr <struct fid_ep> -> Ptr <struct iovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> CULong -> Ptr () -> CLong)
 #field recvmsg , FunPtr (Ptr <struct fid_ep> -> Ptr <struct fi_msg_tagged> -> CULong -> CLong)
 #field send , FunPtr (Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> CULong -> Ptr () -> CLong)
-#field sendv , FunPtr (Ptr <struct fid_ep> -> Ptr <struct CIovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> Ptr () -> CLong)
+#field sendv , FunPtr (Ptr <struct fid_ep> -> Ptr <struct iovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> Ptr () -> CLong)
 #field sendmsg , FunPtr (Ptr <struct fid_ep> -> Ptr <struct fi_msg_tagged> -> CULong -> CLong)
 #field inject , FunPtr (Ptr <struct fid_ep> -> Ptr () -> CSize -> CULong -> CULong -> CLong)
 #field senddata , FunPtr (Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> CULong -> CULong -> Ptr () -> CLong)
 #field injectdata , FunPtr (Ptr <struct fid_ep> -> Ptr () -> CSize -> CULong -> CULong -> CULong -> CLong)
 #stoptype
 #cinline fi_trecv , Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> CULong -> CULong -> Ptr () -> IO CLong
-#cinline fi_trecvv , Ptr <struct fid_ep> -> Ptr <struct CIovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> CULong -> Ptr () -> IO CLong
+#cinline fi_trecvv , Ptr <struct fid_ep> -> Ptr <struct iovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> CULong -> Ptr () -> IO CLong
 #cinline fi_trecvmsg , Ptr <struct fid_ep> -> Ptr <struct fi_msg_tagged> -> CULong -> IO CLong
 #cinline fi_tsend , Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> CULong -> Ptr () -> IO CLong
-#cinline fi_tsendv , Ptr <struct fid_ep> -> Ptr <struct CIovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> Ptr () -> IO CLong
+#cinline fi_tsendv , Ptr <struct fid_ep> -> Ptr <struct iovec> -> Ptr (Ptr ()) -> CSize -> CULong -> CULong -> Ptr () -> IO CLong
 #cinline fi_tsendmsg , Ptr <struct fid_ep> -> Ptr <struct fi_msg_tagged> -> CULong -> IO CLong
 #cinline fi_tinject , Ptr <struct fid_ep> -> Ptr () -> CSize -> CULong -> CULong -> IO CLong
 #cinline fi_tsenddata , Ptr <struct fid_ep> -> Ptr () -> CSize -> Ptr () -> CULong -> CULong -> CULong -> Ptr () -> IO CLong

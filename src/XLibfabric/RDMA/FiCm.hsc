@@ -3,7 +3,8 @@
 #include <rdma/fi_cm.h>
 module XLibfabric.RDMA.FiCm where
 import Foreign.Ptr
-import XLibfabric.RDMA.FiEndpoint
+import XLibfabric.RDMA.FiEndpoint hiding (C'fi_ops_cm, )
+import XLibfabric.RDMA.Fabric (C'fid_t, C'fid)
 #strict_import
 
 {- struct fid_mc {

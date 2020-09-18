@@ -1,12 +1,25 @@
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 #include <bindings.dsl.h>
 #include <rdma/fi_eq.h>
+#include <poll.h>
 module XLibfabric.RDMA.FiEq where
-import XLibfabric.RDMA.Fabric
+import XLibfabric.RDMA.Fabric hiding (C'fid_cntr, C'fid_cq, C'fid_eq, C'fi_eq_attr, C'fid_poll, C'fid_wait, C'fi_wait_attr, C'fid_av)
 import XLibfabric.RDMA.FiErrno
 import Foreign.Ptr
 #strict_import
 
+{-
+struct pollfd {
+               int   fd;         /* file descriptor */
+               short events;     /* requested events */
+               short revents;    /* returned events */
+           };
+-}
+#starttype struct pollfd
+#field fd , CInt
+#field events , CShort
+#field revents , CShort
+#stoptype
 {- enum fi_wait_obj {
     FI_WAIT_NONE,
     FI_WAIT_UNSPEC,
@@ -47,11 +60,11 @@ import Foreign.Ptr
 #stoptype
 {- struct fi_mutex_cond {
     pthread_mutex_t * mutex; pthread_cond_t * cond;
-}; -}
+}; 
 #starttype struct fi_mutex_cond
 #field mutex , Ptr <pthread_mutex_t>
 #field cond , Ptr <pthread_cond_t>
-#stoptype
+#stoptype -}
 {- struct fi_wait_pollfd {
     uint64_t change_index; size_t nfds; struct pollfd * fd;
 }; -}
