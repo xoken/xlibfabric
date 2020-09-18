@@ -26,13 +26,24 @@ source-repository head
 library
   exposed-modules:
       Lib
-      XLibfabric.RDMA.FiErrorNo
+      XLibfabric.RDMA.Fabric
+      XLibfabric.RDMA.FiAtomic
+      XLibfabric.RDMA.FiCm
+      XLibfabric.RDMA.FiCollective
+      XLibfabric.RDMA.FiDomain
+      XLibfabric.RDMA.FiEndpoint
+      XLibfabric.RDMA.FiEq
+      XLibfabric.RDMA.FiErrno
+      XLibfabric.RDMA.FiRma
+      XLibfabric.RDMA.FiTagged
+      XLibfabric.RDMA.FiTrigger
   other-modules:
       Paths_xlibfabric
   hs-source-dirs:
       src
   build-depends:
       base >=4.7 && <5
+     ,unix-bytestring
   default-language: Haskell2010
 
 executable xlibfabric-exe
