@@ -1,4 +1,5 @@
 #include <bindings.cmacros.h>
+#include <stdint.h>
 
 BC_INLINE8(fi_trecv, void*, void*, size_t, void*, fi_addr_t, uint64_t, uint64_t, void*, ssize_t)
 BC_INLINE8(fi_trecvv, void*, const *, void**, size_t, fi_addr_t, uint64_t, uint64_t, void*, ssize_t)

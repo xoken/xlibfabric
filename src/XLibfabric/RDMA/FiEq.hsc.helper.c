@@ -1,4 +1,6 @@
 #include <bindings.cmacros.h>
+#include <stdint.h>
+#include <rdma/fi_eq.h>
 
 BC_INLINE3(fi_trywait, void*, void**, int, int)
 BC_INLINE2(fi_wait, void*, int, int)

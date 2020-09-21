@@ -1,4 +1,6 @@
 #include <bindings.cmacros.h>
+#include <stdint.h>
+#include <rdma/fi_collective.h>
 
 BC_INLINE4(fi_av_set, void*, void*, void**, void*, int)
 BC_INLINE2(fi_av_set_union, void*, const *, int)

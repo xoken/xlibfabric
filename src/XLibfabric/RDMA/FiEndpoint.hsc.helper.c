@@ -1,4 +1,6 @@
 #include <bindings.cmacros.h>
+#include <stdint.h>
+#include <rdma/fi_endpoint.h>
 
 BC_INLINE4(fi_passive_ep, void*, void*, void**, void*, int)
 BC_INLINE4(fi_endpoint, void*, void*, void**, void*, int)

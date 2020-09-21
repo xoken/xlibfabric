@@ -1,4 +1,6 @@
 #include <bindings.cmacros.h>
+#include <stdint.h>
+#include <rdma/fi_cm.h>
 
 BC_INLINE3(fi_setname, fid_t, void*, size_t, int)
 BC_INLINE3(fi_getname, fid_t, void*, size_t*, int)

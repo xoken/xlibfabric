@@ -1,4 +1,6 @@
 #include <bindings.cmacros.h>
+#include <rdma/fi_domain.h>
+#include <stdint.h>
 
 BC_INLINE4(fi_domain, void*, void*, void**, void*, int)
 BC_INLINE3(fi_domain_bind, void*, void*, uint64_t, int)

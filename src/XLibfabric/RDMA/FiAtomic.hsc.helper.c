@@ -1,4 +1,6 @@
 #include <bindings.cmacros.h>
+#include <stdint.h>
+#include <rdma/fi_atomic.h>
 
 BC_INLINE10(fi_atomic, void*, const *, size_t, void*, fi_addr_t, uint64_t, uint64_t, void*, ssize_t)
 BC_INLINE10(fi_atomicv, void*, const *, void**, size_t, fi_addr_t, uint64_t, uint64_t, void*, ssize_t)
