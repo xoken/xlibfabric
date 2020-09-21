@@ -4,7 +4,7 @@
 
 BC_INLINE1(fi_tc_dscp_set, uint8_t, uint32_t)
 BC_INLINE1(fi_tc_dscp_get, uint32_t, uint8_t)
-BC_INLINE1(fi_allocinfo, void, struct fi_info*)
+BC_INLINE0(fi_allocinfo, struct fi_info*)
 BC_INLINE1(fi_close, void*, int)
 BC_INLINE3(fi_control, void*, int, void*, int)
 BC_INLINE3(fi_alias, struct fid*, struct fid**, uint64_t, int)
