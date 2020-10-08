@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       Common
+      --Msg
       XLibfabric.RDMA.Fabric
       --XLibfabric.RDMA.FiAtomic
       XLibfabric.RDMA.FiCm
@@ -50,6 +51,27 @@ library
       src/XLibfabric/RDMA/FiDomain.hsc.helper.c
       src/XLibfabric/RDMA/FiEndpoint.hsc.helper.c
       src/XLibfabric/RDMA/FiEq.hsc.helper.c
+      --include/msg.c
+  includes:
+      --include/shared.h
+      --include/fi_cm.h
+      --include/fi_endpoint.h
+      --include/fi_domain.h
+      --include/fabric.h
+      --include/fi_eq.h
+      --include/fi_errno.h
+      --include/ft_osd.h
+  install-includes:
+      --include/shared.h
+      --include/fi_cm.h
+      --include/fi_endpoint.h
+      --include/fi_domain.h
+      --include/fabric.h
+      --include/fi_eq.h
+      --include/fi_errno.h
+      --include/ft_osd.h
+  extra-lib-dirs:
+      /usr/local/include/rdma/
   default-language: Haskell2010
 
 executable xlibfabric-exe
