@@ -26,7 +26,7 @@ source-repository head
 library
   exposed-modules:
       Common
-      --Msg
+      Msg
       XLibfabric.RDMA.Fabric
       --XLibfabric.RDMA.FiAtomic
       XLibfabric.RDMA.FiCm
@@ -72,6 +72,7 @@ library
       --include/ft_osd.h
   extra-lib-dirs:
       /usr/local/include/rdma/
+  extra-libraries: /usr/local/lib/libfabric.so.1
   default-language: Haskell2010
 
 executable xlibfabric-exe
