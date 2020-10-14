@@ -3,7 +3,9 @@
 #include <rdma/fi_tagged.h>
 module XLibfabric.RDMA.FiTagged where
 import Foreign.Ptr
-import System.Posix.Types.Iovec
+import Common
+import XLibfabric.RDMA.Fabric hiding (C'fid_ep)
+import XLibfabric.RDMA.FiEndpoint hiding (C'fi_ops_tagged)
 #strict_import
 
 {- struct fi_msg_tagged {

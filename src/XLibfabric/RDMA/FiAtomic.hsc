@@ -4,7 +4,9 @@
 module XLibfabric.RDMA.FiAtomic where
 import Foreign.Ptr
 import XLibfabric.RDMA.FiRma
-import XLibfabric.RDMA.Fabric
+import XLibfabric.RDMA.FiDomain hiding (C'fid_domain, C'fi_atomic_attr)
+import XLibfabric.RDMA.Fabric hiding (C'fid_ep)
+import XLibfabric.RDMA.FiEndpoint hiding (C'fi_ops_rma, C'fi_ops_atomic)
 #strict_import
 
 {- struct fi_atomic_attr {

@@ -3,8 +3,9 @@
 #include <rdma/fi_collective.h>
 module XLibfabric.RDMA.FiCollective where
 import Foreign.Ptr
+import XLibfabric.RDMA.Fabric
 import XLibfabric.RDMA.FiAtomic
-import XLibfabric.RDMA.FiDomain
+import XLibfabric.RDMA.FiDomain hiding (C'fid_av, C'fid_av_set, C'fid_domain, C'fi_collective_attr, C'fi_atomic_attr)
 import XLibfabric.RDMA.FiCm
 #strict_import
 

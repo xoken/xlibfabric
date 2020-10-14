@@ -3,6 +3,11 @@
 #include <rdma/fi_trigger.h>
 module XLibfabric.RDMA.FiTrigger where
 import Foreign.Ptr
+import XLibfabric.RDMA.FiTagged
+import XLibfabric.RDMA.FiAtomic
+import XLibfabric.RDMA.FiEndpoint
+import XLibfabric.RDMA.FiRma
+import XLibfabric.RDMA.Fabric hiding (C'fid_ep)
 #strict_import
 
 {- enum fi_trigger_event {
@@ -115,7 +120,8 @@ import Foreign.Ptr
 }; -}
 #starttype struct fi_triggered_context
 #field event_type , <enum fi_trigger_event>
-#field trigger , 
+#field trigger.threshold , <struct fi_trigger_threshold>
+#array_field trigger.internal , Ptr ()
 #stoptype
 {- struct fi_triggered_context2 {
     enum fi_trigger_event event_type;
@@ -125,7 +131,8 @@ import Foreign.Ptr
 }; -}
 #starttype struct fi_triggered_context2
 #field event_type , <enum fi_trigger_event>
-#field trigger , 
+#field trigger.threshold , <struct fi_trigger_threshold>
+#array_field trigger.internal , Ptr ()
 #stoptype
 {- struct fi_deferred_work {
     struct fi_context2 context;
@@ -149,5 +156,11 @@ import Foreign.Ptr
 #field triggering_cntr , Ptr <struct fid_cntr>
 #field completion_cntr , Ptr <struct fid_cntr>
 #field op_type , <enum fi_op_type>
-#field op , 
+#field op.msg , Ptr <struct fi_op_msg >
+#field op.tagged , Ptr <struct fi_op_tagged >
+#field op.rma , Ptr <struct fi_op_rma >
+#field op.atomic , Ptr <struct fi_op_atomic >
+#field op.fetch_atomic , Ptr <struct fi_op_fetch_atomic >
+#field op.compare_atomic , Ptr <struct fi_op_compare_atomic >
+#field op.cntr , Ptr <struct fi_op_cntr >
 #stoptype
