@@ -28,16 +28,16 @@ library
       Common
       Msg
       XLibfabric.RDMA.Fabric
-      --XLibfabric.RDMA.FiAtomic
+      XLibfabric.RDMA.FiAtomic
       XLibfabric.RDMA.FiCm
-      --XLibfabric.RDMA.FiCollective
+      XLibfabric.RDMA.FiCollective
       XLibfabric.RDMA.FiDomain
       XLibfabric.RDMA.FiEndpoint
       XLibfabric.RDMA.FiEq
       XLibfabric.RDMA.FiErrno
-      --XLibfabric.RDMA.FiRma
-      --XLibfabric.RDMA.FiTagged
-      --XLibfabric.RDMA.FiTrigger
+      XLibfabric.RDMA.FiRma
+      XLibfabric.RDMA.FiTagged
+      XLibfabric.RDMA.FiTrigger
   other-modules:
       Paths_xlibfabric
   hs-source-dirs:
