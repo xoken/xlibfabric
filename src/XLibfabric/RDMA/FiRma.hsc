@@ -2,7 +2,8 @@
 #include <bindings.dsl.h>
 #include <rdma/fi_rma.h>
 module XLibfabric.RDMA.FiRma where
-import System.Posix.Types.Iovec
+import Common
+import XLibfabric.RDMA.FiEndpoint hiding (C'fi_ops_rma)
 import Foreign.Ptr
 #strict_import
 
