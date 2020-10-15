@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+
 module Main where
 
 import Foreign.Marshal.Array
@@ -8,7 +10,7 @@ import Foreign.C.String
 import Foreign.C.Types
 import Foreign.Ptr
 import System.Environment
-import XLibfabric.RDMA.Fabric hiding (C'fid_ep)
+import XLibfabric.RDMA.Fabric hiding (C'fid_ep, C'fid_pep, C'fid_eq)
 import XLibfabric.RDMA.FiEndpoint
 import XLibfabric.RDMA.FiEq as Eq
 import XLibfabric.RDMA.FiCm
@@ -25,8 +27,27 @@ main = do
             --withCString "xlibfabric" $ \ptrx -> withCString addr $ \ptra -> msg 1 [ptrx,ptra]-}
     print a
     print b
-    c <- start_server
+    g <- alloca $ \fi_pep' -> do
+                    alloca $ \hints' ->
+                        alloca $ \fab' ->
+                            alloca $ \eq_attr' ->
+                                alloca $ \eq' ->
+                                    alloca $ \pep' -> do
+                                        poke eq_attr' (Eq.C'fi_eq_attr 0 0 1 0 nullPtr)
+                                        return $ GlobalData fi_pep' hints' fab' eq_attr' eq' pep' False
+    c <- start_server g
     print c
+
+data GlobalData = GlobalData {
+        fi_pep :: Ptr (Ptr C'fi_info)
+       --,fi :: Ptr C'fi_info
+       ,hints :: Ptr C'fi_info
+       ,fab :: Ptr (Ptr C'fid_fabric)
+       ,eq_attr :: (Ptr Eq.C'fi_eq_attr)
+       ,eq :: Ptr (Ptr C'fid_eq)
+       ,pep :: Ptr (Ptr C'fid_pep)
+       ,hmem_initialized :: Bool
+    }
 
 
 ctx_cnt :: Int
@@ -40,25 +61,14 @@ close_fid fep = do
     ret <- c'fi_close $ p'fid_ep'fid fep
     print ret
 
-eq_attr' :: Eq.C'fi_eq_attr
-eq_attr' = Eq.C'fi_eq_attr 0 0 1 0 nullPtr 
-
-start_server :: IO CInt
-start_server = do
-        alloca $ \fi_pep -> do
-                    alloca $ \hints ->
-                        alloca $ \fab ->
-                            alloca $ \eq_attr ->
-                                alloca $ \eq ->
-                                    alloca $ \pep -> do
-                                        poke eq_attr eq_attr'
-                                        fabinit `retNonZero` init_oob
-                                                `retNonZero` (getinfo hints fi_pep)
-                                                `retNonZero` (peek fi_pep >>= \pp -> peek pp >>= \p -> c'fi_fabric (c'fi_info'fabric_attr p) fab nullPtr)
-                                                `retNonZero` (peek fab >>= \f -> c'fi_eq_open f eq_attr eq nullPtr)
-                                                `retNonZero` (peek fab >>= \f -> peek fi_pep >>= \vp -> c'fi_passive_ep f vp pep nullPtr)
-                                                `retNonZero` (peek pep >>= \pp -> peek eq >>= \e -> c'fi_pep_bind pp (p'fid_eq'fid e) 0)
-                                                `retNonZero` (peek pep >>= \pp -> c'fi_listen pp)
+start_server :: GlobalData -> IO CInt
+start_server GlobalData {..} = fabinit `retNonZero` init_oob
+                                `retNonZero` (getinfo hints fi_pep)
+                                `retNonZero` (peek fi_pep >>= \pp -> peek pp >>= \p -> c'fi_fabric (c'fi_info'fabric_attr p) fab nullPtr)
+                                `retNonZero` (peek fab >>= \f -> c'fi_eq_open f eq_attr eq nullPtr)
+                                `retNonZero` (peek fab >>= \f -> peek fi_pep >>= \vp -> c'fi_passive_ep f vp pep nullPtr)
+                                `retNonZero` (peek pep >>= \pp -> peek eq >>= \e -> c'fi_pep_bind pp (p'fid_eq'fid e) 0)
+                                `retNonZero` (peek pep >>= \pp -> c'fi_listen pp)
 
 retNonZero :: (Num a, Eq a) => IO a -> IO a -> IO a
 retNonZero a b = do
@@ -79,3 +89,11 @@ init_oob = return 0
 -- ft_read_addr_opts, ft_check_prefix_forced
 getinfo :: Ptr C'fi_info -> Ptr (Ptr C'fi_info) -> IO CInt
 getinfo hints info = return 0
+
+--hmem_init :: 
+
+--sock_listen ::
+
+--read_addr_opts ::
+
+--check_prefix_forced ::
