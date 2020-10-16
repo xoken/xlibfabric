@@ -221,8 +221,21 @@ static int bind_ep_res(void)
 -}
 
 wait_for_comp cq = do
-
-
+    alloca $ \comp -> do
+        ret <- doWhile (c'fi_cq_read cq comp 1) (\x -> x < 0 && ret == -11)
+        if ret /= 1
+            then do
+                print $ "fi_cq_read: " <> show ret
+                retrun ret
+            else
+                return 0 
+            
+doWhile :: IO a -> (a -> Bool) -> IO a
+doWhile a f = do
+    a' <- a
+    if f a'
+        then doWhile a f
+        else return a'
 
 {- wait_for_comp
 static int wait_for_comp(struct fid_cq *cq)
