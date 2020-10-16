@@ -51,6 +51,7 @@ data Env = Env {
    ,av_attr :: C'fi_av_attr
    ,hints :: Ptr C'fi_info
    ,fi :: Ptr (Ptr C'fi_info)
+   ,domain :: Ptr C'fid_domain
 }
 
 defEnv = do
@@ -63,7 +64,8 @@ defEnv = do
                             alloca $ \e'av_attr ->
                                 alloca $ \e'hints ->
                                     alloca $ \e'fi ->
-                                        Env 2 0 e'sep tx_ep rx_ep txcq_array rxcq_array remote_rx_addr av_attr hints fi
+                                        alloca $ \e'domain ->
+                                        Env 2 0 e'sep e'tx_ep e'rx_ep e'txcq_array e'rxcq_array e'remote_rx_addr e'av_attr e'hints e'fi e'domain
 
 datum = 0x12345670
 
@@ -318,9 +320,7 @@ init_fabric = do
                     let ep_attr_ptr = c'fi_info'ep_attr fi
                     ep_attr <- peek ep_attr_ptr
                     poke ep_attr_ptr $ ep_attr {c'ep_attr'tx_ctx_cnt = ctxcnt, c'ep_attr'rx_ctx_cnt = ctxcnt}
-                    ft_open_fabric_res |-> (fi_scalable_ep nullPtr) |-> alloc_ep_res |-> bind_ep_res
-
-                    
+                    ft_open_fabric_res |-> (c'fi_scalable_ep domain fi sep nullPtr) |-> (poke sep >>= c'alloc_ep_res) |-> c'bind_ep_res        
         else
             return ret
 
