@@ -56,13 +56,14 @@ data Env = Env {
    ,buf :: Ptr CChar
    ,tx_buf :: Ptr CChar
    ,rx_buf :: Ptr CChar
+   ,mr_desc :: Ptr ()
 }
 
 defEnv = do
     alloca $ \e'sep -> alloca $ \e'tx_ep -> alloca $ \e'rx_ep -> alloca $ \e'txcq_array ->
         alloca $ \e'rxcq_array -> alloca $ \e'remote_rx_addr -> alloca $ \e'av_attr -> alloca $ \e'av ->
             alloca $ \e'hints -> alloca $ \e'fi -> alloca $ \e'domain ->
-                alloca $ \e'buf -> alloca $ \e'tx_buf -> alloca $ \e'rx_buf
+                alloca $ \e'buf -> alloca $ \e'tx_buf -> alloca $ \e'rx_buf -> alloca $ \e'mr_desc
                 Env 2
                     0
                     e'sep
@@ -79,6 +80,7 @@ defEnv = do
                     e'buf
                     e'tx_buf
                     e'rx_buf
+                    e'mr_desc
 
 datum = 0x12345670
 
@@ -90,7 +92,12 @@ close_fid fep = do
     ret <- c'fi_close $ p'fid_ep'fid fep
     print ret
 
-free_res = do
+free_res :: Env -> IO ()
+free_res ENv {..} = do
+    closev_fid rx_ep ctx_cnt
+    closev_fid tx_ep ctx_cnt
+    closev_fid rxcq_array ctx_cnt
+    closev_fid txcq_array ctx_cnt
 
 {- free_res
 static void free_res(void)
@@ -241,7 +248,7 @@ wait_for_comp cq = do
         if ret /= 1
             then do
                 print $ "fi_cq_read: " <> show ret
-                retrun ret
+                return ret
             else
                 return 0 
             
@@ -275,6 +282,8 @@ run_test = do
     let ret = 0
         tb = castPtr tx_buf
         rb = castPtr rx_buf
+    if
+        then do
 
 
 {- run_test
