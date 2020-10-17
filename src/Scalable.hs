@@ -308,8 +308,26 @@ run_test = do
     let ret = 0
         tb = castPtr tx_buf
         rb = castPtr rx_buf
-    if
+    if -- (opts.dst_addr)
         then do
+            run_test_send
+        else do
+            run_test_recv
+
+run_test_send 0 ret = return ret
+run_test_send i 0 = return 0
+run_test_send i _ = do
+    print $ "Posting send for ctx: " ++ show i
+    poke tb[0] (datum + i)
+    (c'fi_send tx_ep[i] tx_buf tx_size mr_desc remote_rx_addr[i] nullPtr) |-> (wait_for_comp txcq_array[i])
+
+run_test_recv 0 ret = return ret
+run_test_recv i 0 = return 0
+run_test_recv i _ = do
+    print $ "wait for recv completion for ctx: " ++ show i
+    wait_for_comp rxcq_array[i]
+    ret <- peek rb[0]
+    print ret
 
 
 {- run_test
