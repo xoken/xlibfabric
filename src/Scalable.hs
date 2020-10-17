@@ -49,23 +49,36 @@ data Env = Env {
    ,rxcq_array :: Ptr (Ptr C'fid_cq)
    ,remote_rx_addr :: (Ptr C'fi_addr_t)
    ,av_attr :: C'fi_av_attr
+   ,av :: Ptr C'fid_av
    ,hints :: Ptr C'fi_info
    ,fi :: Ptr (Ptr C'fi_info)
    ,domain :: Ptr C'fid_domain
+   ,buf :: Ptr CChar
+   ,tx_buf :: Ptr CChar
+   ,rx_buf :: Ptr CChar
 }
 
 defEnv = do
-    alloca $ \e'sep ->
-        alloca $ \e'tx_ep ->
-            alloca $ \e'rx_ep ->
-                alloca $ \e'txcq_array ->
-                    alloca $ \e'rxcq_array ->
-                        alloca $ \e'remote_rx_addr ->
-                            alloca $ \e'av_attr ->
-                                alloca $ \e'hints ->
-                                    alloca $ \e'fi ->
-                                        alloca $ \e'domain ->
-                                        Env 2 0 e'sep e'tx_ep e'rx_ep e'txcq_array e'rxcq_array e'remote_rx_addr e'av_attr e'hints e'fi e'domain
+    alloca $ \e'sep -> alloca $ \e'tx_ep -> alloca $ \e'rx_ep -> alloca $ \e'txcq_array ->
+        alloca $ \e'rxcq_array -> alloca $ \e'remote_rx_addr -> alloca $ \e'av_attr -> alloca $ \e'av ->
+            alloca $ \e'hints -> alloca $ \e'fi -> alloca $ \e'domain ->
+                alloca $ \e'buf -> alloca $ \e'tx_buf -> alloca $ \e'rx_buf
+                Env 2
+                    0
+                    e'sep
+                    e'tx_ep
+                    e'rx_ep
+                    e'txcq_array
+                    e'rxcq_array
+                    e'remote_rx_addr
+                    e'av_attr
+                    e'av
+                    e'hints
+                    e'fi
+                    e'domain
+                    e'buf
+                    e'tx_buf
+                    e'rx_buf
 
 datum = 0x12345670
 
@@ -161,8 +174,8 @@ static int alloc_ep_res(struct fid_ep *sep)
 -}
 
 bind_ep_res = do
-    fi_scalable_ep_bind |->
-    (fi_ep_bind |-> fi_enable) |->
+    (fi_scalable_ep_bind sep (p'fid_av'fid av) 0) |->
+    (\i -> (fi_ep_bind) |-> fi_enable) |->
     (fi_ep_bind |-> fi_enable |-> fi_recv) |->
     fi_enable
 
@@ -260,6 +273,8 @@ static int wait_for_comp(struct fid_cq *cq)
 
 run_test = do
     let ret = 0
+        tb = castPtr tx_buf
+        rb = castPtr rx_buf
 
 
 {- run_test
@@ -302,7 +317,7 @@ static int run_test()
 
 init_fabric :: Env -> IO CInt
 init_fabric = do
-    getinfo hints fi
+    ret <- ft_getinfo hints fi
     if ret == 0
         then do
             fi' <- peek fi
