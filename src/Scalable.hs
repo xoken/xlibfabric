@@ -61,8 +61,8 @@ data Env = Env {
 }
 
 defEnv = do
-    alloca $ \e'sep -> alloca $ \e'tx_ep -> alloca $ \e'rx_ep -> alloca $ \e'txcq_array ->
-        alloca $ \e'rxcq_array -> alloca $ \e'remote_rx_addr -> alloca $ \e'av_attr -> alloca $ \e'av ->
+    alloca $ \e'sep -> allocaArray 2 $ \e'tx_ep -> allocaArray 2 $ \e'rx_ep -> allocaArray 2 $ \e'txcq_array ->
+        allocaArray 2 $ \e'rxcq_array -> alloca $ \e'remote_rx_addr -> alloca $ \e'av_attr -> alloca $ \e'av ->
             alloca $ \e'hints -> alloca $ \e'fi -> alloca $ \e'domain ->
                 alloca $ \e'buf -> alloca $ \e'tx_buf -> alloca $ \e'rx_buf -> alloca $ \e'mr_desc ->
                     let env = Env 2
@@ -208,7 +208,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 
 bind_ep_res = do
     (fi_scalable_ep_bind sep (p'fid_av'fid av) 0) |->
-    (\i -> (fi_ep_bind) |-> fi_enable) |->
+    mapM_ (\i -> (fi_ep_bind) |-> fi_enable) [0 .. (ctx_cnt - 1)] |->
     (fi_ep_bind |-> fi_enable |-> fi_recv) |->
     fi_enable
 
@@ -413,20 +413,22 @@ static int init_fabric(void)
 -}
 
 init_av = do
-    -- 
-    (mapM_ (\x -> c'fi_rx_addr remote_fi_addr x rx_ctx_bits) [0 .. (ctx_cnt - 1)] >> fi_recv) |->
-    wait_for_comp
+    -- based on opts do init_av_a or init_av_b
+    (mapM_ (\x -> c'fi_rx_addr remote_fi_addr x rx_ctx_bits) [0 .. (ctx_cnt - 1)] >> recv fi_recvrx_ep[0] rx_buf rx_size mr_desc 0 nullPtr) |->
+    (wait_for_comp txcq_array[0])
 
-init_av_send = do
-    ft_av_insert |->
-    fi_getname |->
-    fi_send |->
-    wait_for_comp
+init_av_a = do
+    alloca $ \addrlen ->
+        poke 256
+            (ft_av_insert av c'fi_info'dest_addr 1 remote_fi_addr 0 nullPtr) |->
+            (fi_getname p'fid_ep'fid tx_buf addrlen) |->
+            (peek addrlen >>= \al -> fi_send tx_ep[0] tx_buf al mr_desc remote_fi_addr nullPtr) |->
+            (wait_for_comp rxcq_array[0])
 
-init_av_recv = do
-    wait_for_comp |->
-    ft_av_insert |->
-    fi_send
+init_av_b = do
+    (wait_for_comp rxcq_array[0]) |->
+    (ft_av_insert) av rx_buf 1 remote_fi_addr 0 nullPtr) |->
+    (fi_send tx_ep[0] tx_buf 1 mr_desc remote_fi_addr nullPtr) |->
     
 
 {- init_av
