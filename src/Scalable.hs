@@ -3,6 +3,7 @@
 
 module Scalable where
 
+import Data.Bits (shiftR)
 import Foreign.Marshal.Array
 import Foreign.Marshal.Alloc
 import Foreign.Storable
@@ -63,24 +64,24 @@ defEnv = do
     alloca $ \e'sep -> alloca $ \e'tx_ep -> alloca $ \e'rx_ep -> alloca $ \e'txcq_array ->
         alloca $ \e'rxcq_array -> alloca $ \e'remote_rx_addr -> alloca $ \e'av_attr -> alloca $ \e'av ->
             alloca $ \e'hints -> alloca $ \e'fi -> alloca $ \e'domain ->
-                alloca $ \e'buf -> alloca $ \e'tx_buf -> alloca $ \e'rx_buf -> alloca $ \e'mr_desc
-                Env 2
-                    0
-                    e'sep
-                    e'tx_ep
-                    e'rx_ep
-                    e'txcq_array
-                    e'rxcq_array
-                    e'remote_rx_addr
-                    e'av_attr
-                    e'av
-                    e'hints
-                    e'fi
-                    e'domain
-                    e'buf
-                    e'tx_buf
-                    e'rx_buf
-                    e'mr_desc
+                alloca $ \e'buf -> alloca $ \e'tx_buf -> alloca $ \e'rx_buf -> alloca $ \e'mr_desc ->
+                    let env = Env 2
+                                0
+                                e'sep
+                                e'tx_ep
+                                e'rx_ep
+                                e'txcq_array
+                                e'rxcq_array
+                                e'remote_rx_addr
+                                e'av_attr
+                                e'av
+                                e'hints
+                                e'fi
+                                e'domain
+                                e'buf
+                                e'tx_buf
+                                e'rx_buf
+                                e'mr_desc
 
 datum = 0x12345670
 
@@ -124,6 +125,31 @@ static void free_res(void)
 	}
 }
 -}
+
+alloc_ep_res :: Env -> IO CInt
+alloc_ep_res Env {..} = do
+    poke (p'fi_av_attr'rx_ctx_bits av_attr) $ ctxShiftR (ctx_cnt, rx_ctx_bits)
+    ret <- ft_alloc_ep_res fi
+    if ret == 0
+        then do
+            --txcq_array = calloc(ctx_cnt, sizeof *txcq_array);
+            --rxcq_array = calloc(ctx_cnt, sizeof *rxcq_array);
+            --tx_ep = calloc(ctx_cnt, sizeof *tx_ep);
+            --rx_ep = calloc(ctx_cnt, sizeof *rx_ep);
+            --remote_rx_addr = calloc(ctx_cnt, sizeof *remote_rx_addr);
+            mapM_ (\i -> do
+                            (fi_tx_context sep i nullPtr (plusPtr tx_ep (i*(sizeOf tx_ep))) nullPtr)
+                            (fi_cq_open domain cq_attr (plusPtr txcq_array (i*(sizeOf txcq_array))) nullPtr)
+                            (fi_rx_context sep i nullPtr (plusPtr trx_ep (i*(sizeOf trx_ep))) nullPtr)
+                            (fi_cq_open domain cq_attr (plusPtr rxcq_array (i*(sizeOf rxcq_array))) nullPtr))
+                  [0 .. (ctx_cnt - 1)]     
+        else
+            return ret
+
+ctxShiftR :: (Int, Int) -> Int
+ctxShiftR (c,r) | shifted <= 0 = r+1
+                | otherwise = ctxShiftR (c,r+1)
+                where shifted = c `shiftR` r
 
 {- alloc_ep_res
 static int alloc_ep_res(struct fid_ep *sep)
@@ -344,7 +370,7 @@ init_fabric = do
                     let ep_attr_ptr = c'fi_info'ep_attr fi
                     ep_attr <- peek ep_attr_ptr
                     poke ep_attr_ptr $ ep_attr {c'ep_attr'tx_ctx_cnt = ctxcnt, c'ep_attr'rx_ctx_cnt = ctxcnt}
-                    ft_open_fabric_res |-> (c'fi_scalable_ep domain fi sep nullPtr) |-> (poke sep >>= c'alloc_ep_res) |-> c'bind_ep_res        
+                    ft_open_fabric_res |-> (c'fi_scalable_ep domain fi sep nullPtr) |-> (poke sep >>= alloc_ep_res) |-> bind_ep_res        
         else
             return ret
 
