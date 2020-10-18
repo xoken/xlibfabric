@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleContexts #-}
+
 
 module Scalable where
 
@@ -11,10 +13,11 @@ import Foreign.C.String
 import Foreign.C.Types
 import Foreign.Ptr
 import System.Environment
-import XLibfabric.RDMA.Fabric hiding (C'fid_ep, C'fid_pep, C'fid_eq)
+import XLibfabric.RDMA.Fabric hiding (C'fid_cq, C'fid_ep, C'fid_pep, C'fid_eq, C'fid_av, C'fid_domain)
 import XLibfabric.RDMA.FiEndpoint
-import XLibfabric.RDMA.FiEq as Eq
+import XLibfabric.RDMA.FiEq
 import XLibfabric.RDMA.FiCm
+import XLibfabric.RDMA.FiDomain hiding (C'fi_cq_attr)
 
 {- IMPORTS
 #include <stdio.h>
@@ -49,9 +52,10 @@ data Env = Env {
    ,txcq_array :: Ptr (Ptr C'fid_cq)
    ,rxcq_array :: Ptr (Ptr C'fid_cq)
    ,remote_rx_addr :: (Ptr C'fi_addr_t)
+   ,cq_attr :: Ptr C'fi_cq_attr
    ,av_attr :: C'fi_av_attr
    ,av :: Ptr C'fid_av
-   ,hints :: Ptr C'fi_info
+   ,hints :: Ptr (Ptr C'fi_info)
    ,fi :: Ptr (Ptr C'fi_info)
    ,domain :: Ptr C'fid_domain
    ,buf :: Ptr CChar
@@ -127,6 +131,8 @@ static void free_res(void)
 }
 -}
 
+ft_alloc_ep_res a = return 0
+
 alloc_ep_res :: Env -> IO CInt
 alloc_ep_res (env@Env {..}) = do
     poke (p'fi_av_attr'rx_ctx_bits av_attr) $ ctxShiftR (ctx_cnt, rx_ctx_bits)
@@ -139,10 +145,10 @@ alloc_ep_res (env@Env {..}) = do
             --rx_ep = calloc(ctx_cnt, sizeof *rx_ep);
             --remote_rx_addr = calloc(ctx_cnt, sizeof *remote_rx_addr);
             mapM_ (\i -> do
-                            (fi_tx_context sep i nullPtr (plusPtr tx_ep (i*(sizeOf tx_ep))) nullPtr)
-                            (fi_cq_open domain cq_attr (plusPtr txcq_array (i*(sizeOf txcq_array))) nullPtr)
-                            (fi_rx_context sep i nullPtr (plusPtr trx_ep (i*(sizeOf trx_ep))) nullPtr)
-                            (fi_cq_open domain cq_attr (plusPtr rxcq_array (i*(sizeOf rxcq_array))) nullPtr))
+                            (c'fi_tx_context sep i nullPtr (plusPtr tx_ep (i*(sizeOf tx_ep))) nullPtr)
+                            (c'fi_cq_open domain cq_attr (plusPtr txcq_array (i*(sizeOf txcq_array))) nullPtr)
+                            (c'fi_rx_context sep i nullPtr (plusPtr rx_ep (i*(sizeOf rx_ep))) nullPtr)
+                            (c'fi_cq_open domain cq_attr (plusPtr rxcq_array (i*(sizeOf rxcq_array))) nullPtr))
                   [0 .. (ctx_cnt - 1)]     
         else
             return ret
@@ -271,7 +277,7 @@ static int bind_ep_res(void)
 
 wait_for_comp (env@Env {..}) cq = do
     alloca $ \comp -> do
-        ret <- doWhile (c'fi_cq_read cq comp 1) (\x -> x < 0 && ret == -11)
+        ret <- doWhile (fmap (\x -> (x, -11)) (c'fi_cq_read cq comp 1)) (\(x,ret) -> x < 0 && ret == -11)
         if ret /= 1
             then do
                 print $ "fi_cq_read: " <> show ret
@@ -279,7 +285,6 @@ wait_for_comp (env@Env {..}) cq = do
             else
                 return 0 
             
-doWhile :: IO a -> (a -> Bool) -> IO a
 doWhile a f = do
     a' <- a
     if f a'
@@ -311,13 +316,13 @@ run_test (env@Env {..}) = do
         rb = castPtr rx_buf
     if True -- (opts.dst_addr)
         then do
-            run_test_send (env@Env {..}) 0 0
+            run_test_send env 0 0
         else do
-            run_test_recv (env@Env {..}) 0 0
+            run_test_recv env 0 0
 
-run_test_send 2 ret = return ret
-run_test_send i 0 = return 0
-run_test_send i _ = do
+run_test_send (env@Env {..}) 2 ret = return ret
+run_test_send (env@Env {..}) i 0 = return 0
+run_test_send (env@Env {..}) i _ = do
     print $ "Posting send for ctx: " ++ show i
     poke tb[0] (datum + i)
     (c'fi_send tx_ep[i] tx_buf tx_size mr_desc remote_rx_addr[i] nullPtr) |-> (wait_for_comp env txcq_array[i]) >>= \r -> env run_test_send (i + 1) r
@@ -386,7 +391,7 @@ init_fabric (env@Env {..}) = do
                     --
                     let ep_attr_ptr = c'fi_info'ep_attr fi
                     ep_attr <- peek ep_attr_ptr
-                    poke ep_attr_ptr $ ep_attr {c'ep_attr'tx_ctx_cnt = ctxcnt, c'ep_attr'rx_ctx_cnt = ctxcnt}
+                    poke ep_attr_ptr $ ep_attr {c'fi_ep_attr'tx_ctx_cnt = ctxcnt, c'fi_ep_attr'rx_ctx_cnt = ctxcnt}
                     ft_open_fabric_res |-> (c'fi_scalable_ep domain fi sep nullPtr) |-> (poke sep >>= alloc_ep_res) |-> bind_ep_res        
         else
             return ret
@@ -535,7 +540,7 @@ static int run(void)
 scalable :: IO ()
 scalable = do
     alloca $ \e'sep -> allocaArray 2 $ \e'tx_ep -> allocaArray 2 $ \e'rx_ep -> allocaArray 2 $ \e'txcq_array ->
-        allocaArray 2 $ \e'rxcq_array -> alloca $ \e'remote_rx_addr -> alloca $ \e'av_attr -> alloca $ \e'av ->
+        allocaArray 2 $ \e'rxcq_array -> alloca $ \e'remote_rx_addr -> alloca $ \e'cq_attr -> alloca $ \e'av_attr -> alloca $ \e'av ->
             alloca $ \e'hints -> alloca $ \e'fi -> alloca $ \e'domain ->
                 alloca $ \e'buf -> alloca $ \e'tx_buf -> alloca $ \e'rx_buf -> alloca $ \e'mr_desc -> do
                     h <- c'fi_allocinfo
@@ -548,6 +553,7 @@ scalable = do
                                 e'txcq_array
                                 e'rxcq_array
                                 e'remote_rx_addr
+                                e'cq_attr
                                 e'av_attr
                                 e'av
                                 e'hints
