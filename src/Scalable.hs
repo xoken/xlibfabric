@@ -94,7 +94,7 @@ close_fid fep = do
     print ret
 
 free_res :: Env -> IO ()
-free_res ENv {..} = do
+free_res Env {..} = do
     closev_fid rx_ep ctx_cnt
     closev_fid tx_ep ctx_cnt
     closev_fid rxcq_array ctx_cnt
@@ -127,7 +127,7 @@ static void free_res(void)
 -}
 
 alloc_ep_res :: Env -> IO CInt
-alloc_ep_res Env {..} = do
+alloc_ep_res (env@Env {..}) = do
     poke (p'fi_av_attr'rx_ctx_bits av_attr) $ ctxShiftR (ctx_cnt, rx_ctx_bits)
     ret <- ft_alloc_ep_res fi
     if ret == 0
@@ -268,7 +268,7 @@ static int bind_ep_res(void)
 }
 -}
 
-wait_for_comp cq = do
+wait_for_comp (env@Env {..}) cq = do
     alloca $ \comp -> do
         ret <- doWhile (c'fi_cq_read cq comp 1) (\x -> x < 0 && ret == -11)
         if ret /= 1
@@ -304,29 +304,29 @@ static int wait_for_comp(struct fid_cq *cq)
 }
 -}
 
-run_test = do
+run_test (env@Env {..}) = do
     let ret = 0
         tb = castPtr tx_buf
         rb = castPtr rx_buf
-    if -- (opts.dst_addr)
+    if True -- (opts.dst_addr)
         then do
-            run_test_send 0 0
+            run_test_send (env@Env {..}) 0 0
         else do
-            run_test_recv 0 0
+            run_test_recv (env@Env {..}) 0 0
 
 run_test_send 2 ret = return ret
 run_test_send i 0 = return 0
 run_test_send i _ = do
     print $ "Posting send for ctx: " ++ show i
     poke tb[0] (datum + i)
-    (c'fi_send tx_ep[i] tx_buf tx_size mr_desc remote_rx_addr[i] nullPtr) |-> (wait_for_comp txcq_array[i]) >>= \r -> run_test_send (i + 1) r
+    (c'fi_send tx_ep[i] tx_buf tx_size mr_desc remote_rx_addr[i] nullPtr) |-> (wait_for_comp env txcq_array[i]) >>= \r -> env run_test_send (i + 1) r
 
-run_test_recv 0 ret = return ret
-run_test_recv i 0 = return 0
-run_test_recv i _ = do
+run_test_recv (env@Env {..}) 0 ret = return ret
+run_test_recv (env@Env {..}) i 0 = return 0
+run_test_recv (env@Env {..}) i _ = do
     print $ "wait for recv completion for ctx: " ++ show i
-    wait_for_comp rxcq_array[i]
-    peek rb[0]  >>= \r -> run_test_send (i + 1) r
+    wait_for_comp env rxcq_array[i]
+    peek rb[0]  >>= \r -> run_test_recv ( (i + 1) r
 
 {- run_test
 static int run_test()
@@ -367,7 +367,7 @@ static int run_test()
 -}
 
 init_fabric :: Env -> IO CInt
-init_fabric = do
+init_fabric (env@Env {..}) = do
     ret <- ft_getinfo hints fi
     if ret == 0
         then do
@@ -428,21 +428,21 @@ static int init_fabric(void)
 }
 -}
 
-init_av = do
+init_av (env@Env {..}) = do
     -- based on opts do init_av_a or init_av_b
     (mapM_ (\x -> c'fi_rx_addr remote_fi_addr x rx_ctx_bits) [0 .. (ctx_cnt - 1)] >> recv fi_recvrx_ep[0] rx_buf rx_size mr_desc 0 nullPtr) |->
     (wait_for_comp txcq_array[0])
 
-init_av_a = do
+init_av_a (env@Env {..}) = do
     alloca $ \addrlen ->
         poke 256
             (ft_av_insert av c'fi_info'dest_addr 1 remote_fi_addr 0 nullPtr) |->
             (fi_getname p'fid_ep'fid tx_buf addrlen) |->
             (peek addrlen >>= \al -> fi_send tx_ep[0] tx_buf al mr_desc remote_fi_addr nullPtr) |->
-            (wait_for_comp rxcq_array[0])
+            (wait_for_comp env rxcq_array[0])
 
-init_av_b = do
-    (wait_for_comp rxcq_array[0]) |->
+init_av_b (env@Env {..}) = do
+    (wait_for_comp env rxcq_array[0]) |->
     (ft_av_insert) av rx_buf 1 remote_fi_addr 0 nullPtr) |->
     (fi_send tx_ep[0] tx_buf 1 mr_desc remote_fi_addr nullPtr) |->
     
@@ -506,8 +506,8 @@ static int init_av(void)
 }
 -}
 
-run :: IO CInt
-run = init_fabric |-> init_av |-> run_test
+run :: Env -> IO CInt
+run env = init_fabric env |-> init_av env |-> run_test env
 
 {- run
 static int run(void)
@@ -530,6 +530,35 @@ static int run(void)
 	return ret;
 }
 -}
+
+scalable :: IO ()
+scalable = do
+    alloca $ \e'sep -> allocaArray 2 $ \e'tx_ep -> allocaArray 2 $ \e'rx_ep -> allocaArray 2 $ \e'txcq_array ->
+        allocaArray 2 $ \e'rxcq_array -> alloca $ \e'remote_rx_addr -> alloca $ \e'av_attr -> alloca $ \e'av ->
+            alloca $ \e'hints -> alloca $ \e'fi -> alloca $ \e'domain ->
+                alloca $ \e'buf -> alloca $ \e'tx_buf -> alloca $ \e'rx_buf -> alloca $ \e'mr_desc ->
+                    h <- c'fi_allocinfo
+                    poke e'hints h
+                    let env = Env 2
+                                0
+                                e'sep
+                                e'tx_ep
+                                e'rx_ep
+                                e'txcq_array
+                                e'rxcq_array
+                                e'remote_rx_addr
+                                e'av_attr
+                                e'av
+                                e'hints
+                                e'fi
+                                e'domain
+                                e'buf
+                                e'tx_buf
+                                e'rx_buf
+                                e'mr_desc
+                    run env
+
+    
 
 {- main
 int main(int argc, char **argv)
