@@ -389,7 +389,7 @@ init_fabric (env@Env {..}) = do
                     --fi->ep_attr->tx_ctx_cnt = ctx_cnt;
                     --fi->ep_attr->rx_ctx_cnt = ctx_cnt;
                     --
-                    let ep_attr_ptr = c'fi_info'ep_attr fi
+                    let ep_attr_ptr = c'fi_info'ep_attr fi''
                     ep_attr <- peek ep_attr_ptr
                     poke ep_attr_ptr $ ep_attr {c'fi_ep_attr'tx_ctx_cnt = ctxcnt, c'fi_ep_attr'rx_ctx_cnt = ctxcnt}
                     ft_open_fabric_res |-> (c'fi_scalable_ep domain fi sep nullPtr) |-> (poke sep >>= alloc_ep_res) |-> bind_ep_res        
@@ -436,21 +436,21 @@ static int init_fabric(void)
 
 init_av (env@Env {..}) = do
     -- based on opts do init_av_a or init_av_b
-    (mapM_ (\x -> c'fi_rx_addr remote_fi_addr x rx_ctx_bits) [0 .. (ctx_cnt - 1)] >> recv fi_recvrx_ep[0] rx_buf rx_size mr_desc 0 nullPtr) |->
-        (wait_for_comp txcq_array)
+    (mapM_ (\x -> c'fi_rx_addr remote_fi_addr x rx_ctx_bits) [0 .. (ctx_cnt - 1)] >> c'fi_recv rx_ep[0] rx_buf rx_size mr_desc 0 nullPtr) |->
+        (wait_for_comp env txcq_array)
 
 init_av_a (env@Env {..}) = do
     alloca $ \addrlen ->
         poke 256
             (ft_av_insert av c'fi_info'dest_addr 1 remote_fi_addr 0 nullPtr) |->
-            (fi_getname p'fid_ep'fid tx_buf addrlen) |->
-            (peek addrlen >>= \al -> fi_send tx_ep[0] tx_buf al mr_desc remote_fi_addr nullPtr) |->
+            (c'fi_getname p'fid_ep'fid tx_buf addrlen) |->
+            (peek addrlen >>= \al -> c'fi_send tx_ep[0] tx_buf al mr_desc remote_fi_addr nullPtr) |->
             (wait_for_comp env rxcq_array[0])
 
 init_av_b (env@Env {..}) = do
     (wait_for_comp env rxcq_array[0]) |->
         (ft_av_insert av rx_buf 1 remote_fi_addr 0 nullPtr) |->
-        (fi_send tx_ep[0] tx_buf 1 mr_desc remote_fi_addr nullPtr)
+        (c'fi_send tx_ep[0] tx_buf 1 mr_desc remote_fi_addr nullPtr)
     
 
 {- init_av
