@@ -59,7 +59,7 @@ data Env = Env {
    ,rx_buf :: Ptr CChar
    ,mr_desc :: Ptr ()
 }
-
+{-
 defEnv = do
     alloca $ \e'sep -> allocaArray 2 $ \e'tx_ep -> allocaArray 2 $ \e'rx_ep -> allocaArray 2 $ \e'txcq_array ->
         allocaArray 2 $ \e'rxcq_array -> alloca $ \e'remote_rx_addr -> alloca $ \e'av_attr -> alloca $ \e'av ->
@@ -82,6 +82,7 @@ defEnv = do
                                 e'tx_buf
                                 e'rx_buf
                                 e'mr_desc
+                    return env-}
 
 datum = 0x12345670
 
@@ -205,13 +206,13 @@ static int alloc_ep_res(struct fid_ep *sep)
 	return 0;
 }
 -}
-
+{-
 bind_ep_res = do
     (fi_scalable_ep_bind sep (p'fid_av'fid av) 0) |->
     mapM_ (\i -> (fi_ep_bind) |-> fi_enable) [0 .. (ctx_cnt - 1)] |->
     (fi_ep_bind |-> fi_enable |-> fi_recv) |->
     fi_enable
-
+-}
 {- bind_ep_res
 static int bind_ep_res(void)
 {
@@ -326,7 +327,7 @@ run_test_recv (env@Env {..}) i 0 = return 0
 run_test_recv (env@Env {..}) i _ = do
     print $ "wait for recv completion for ctx: " ++ show i
     wait_for_comp env rxcq_array[i]
-    peek rb[0]  >>= \r -> run_test_recv ( (i + 1) r
+    peek rb[0]  >>= \r -> run_test_recv env (i + 1) r
 
 {- run_test
 static int run_test()
@@ -431,7 +432,7 @@ static int init_fabric(void)
 init_av (env@Env {..}) = do
     -- based on opts do init_av_a or init_av_b
     (mapM_ (\x -> c'fi_rx_addr remote_fi_addr x rx_ctx_bits) [0 .. (ctx_cnt - 1)] >> recv fi_recvrx_ep[0] rx_buf rx_size mr_desc 0 nullPtr) |->
-    (wait_for_comp txcq_array[0])
+        (wait_for_comp txcq_array)
 
 init_av_a (env@Env {..}) = do
     alloca $ \addrlen ->
@@ -443,8 +444,8 @@ init_av_a (env@Env {..}) = do
 
 init_av_b (env@Env {..}) = do
     (wait_for_comp env rxcq_array[0]) |->
-    (ft_av_insert) av rx_buf 1 remote_fi_addr 0 nullPtr) |->
-    (fi_send tx_ep[0] tx_buf 1 mr_desc remote_fi_addr nullPtr) |->
+        (ft_av_insert av rx_buf 1 remote_fi_addr 0 nullPtr) |->
+        (fi_send tx_ep[0] tx_buf 1 mr_desc remote_fi_addr nullPtr)
     
 
 {- init_av
@@ -536,7 +537,7 @@ scalable = do
     alloca $ \e'sep -> allocaArray 2 $ \e'tx_ep -> allocaArray 2 $ \e'rx_ep -> allocaArray 2 $ \e'txcq_array ->
         allocaArray 2 $ \e'rxcq_array -> alloca $ \e'remote_rx_addr -> alloca $ \e'av_attr -> alloca $ \e'av ->
             alloca $ \e'hints -> alloca $ \e'fi -> alloca $ \e'domain ->
-                alloca $ \e'buf -> alloca $ \e'tx_buf -> alloca $ \e'rx_buf -> alloca $ \e'mr_desc ->
+                alloca $ \e'buf -> alloca $ \e'tx_buf -> alloca $ \e'rx_buf -> alloca $ \e'mr_desc -> do
                     h <- c'fi_allocinfo
                     poke e'hints h
                     let env = Env 2
