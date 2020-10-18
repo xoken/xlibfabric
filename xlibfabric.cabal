@@ -27,6 +27,7 @@ library
   exposed-modules:
       Common
       Msg
+      Scalable
       XLibfabric.RDMA.Fabric
       XLibfabric.RDMA.FiAtomic
       XLibfabric.RDMA.FiCm

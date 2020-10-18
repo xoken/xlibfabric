@@ -14,7 +14,7 @@ import XLibfabric.RDMA.Fabric hiding (C'fid_ep, C'fid_pep, C'fid_eq)
 import XLibfabric.RDMA.FiEndpoint
 import XLibfabric.RDMA.FiEq as Eq
 import XLibfabric.RDMA.FiCm
-import Msg
+import Scalable
 
 main :: IO ()
 main = do
@@ -37,7 +37,7 @@ main = do
                                         return $ GlobalData fi_pep' hints' fab' eq_attr' eq' pep' False
     c <- start_server g
     print c
-
+{-
 data GlobalData = GlobalData {
         fi_pep :: Ptr (Ptr C'fi_info)
        --,fi :: Ptr C'fi_info
@@ -77,23 +77,4 @@ retNonZero a b = do
         then b
     else
         return a'
-
--- ft_hmem_init
-fabinit :: IO CInt
-fabinit = return 0
-
--- ft_sock_listen
-init_oob :: IO CInt
-init_oob = return 0
-
--- ft_read_addr_opts, ft_check_prefix_forced
-getinfo :: Ptr C'fi_info -> Ptr (Ptr C'fi_info) -> IO CInt
-getinfo hints info = return 0
-
---hmem_init :: 
-
---sock_listen ::
-
---read_addr_opts ::
-
---check_prefix_forced ::
+-}
