@@ -53,7 +53,7 @@ data Env = Env {
    ,rxcq_array :: Ptr (Ptr C'fid_cq)
    ,remote_rx_addr :: (Ptr C'fi_addr_t)
    ,cq_attr :: Ptr C'fi_cq_attr
-   ,av_attr :: C'fi_av_attr
+   ,av_attr :: Ptr C'fi_av_attr
    ,av :: Ptr C'fid_av
    ,hints :: Ptr (Ptr C'fi_info)
    ,fi :: Ptr (Ptr C'fi_info)
@@ -62,6 +62,9 @@ data Env = Env {
    ,tx_buf :: Ptr CChar
    ,rx_buf :: Ptr CChar
    ,mr_desc :: Ptr ()
+   ,remote_fi_addr :: CULong
+   ,rx_size :: Ptr ()
+   ,tx_size :: Ptr ()
 }
 {-
 defEnv = do
@@ -212,13 +215,14 @@ static int alloc_ep_res(struct fid_ep *sep)
 	return 0;
 }
 -}
-{-
-bind_ep_res = do
-    (fi_scalable_ep_bind sep (p'fid_av'fid av) 0) |->
-    mapM_ (\i -> (fi_ep_bind) |-> fi_enable) [0 .. (ctx_cnt - 1)] |->
-    (fi_ep_bind |-> fi_enable |-> fi_recv) |->
-    fi_enable
--}
+
+bind_ep_res (env@(Env {..})) = do
+    return 0
+    --(fi_scalable_ep_bind sep (p'fid_av'fid av) 0) |->
+    --mapM_ (\i -> (fi_ep_bind) |-> fi_enable) [0 .. (ctx_cnt - 1)] |->
+    --(fi_ep_bind |-> fi_enable |-> fi_recv) |->
+    --fi_enable
+
 {- bind_ep_res
 static int bind_ep_res(void)
 {
@@ -316,23 +320,23 @@ run_test (env@Env {..}) = do
         rb = castPtr rx_buf
     if True -- (opts.dst_addr)
         then do
-            run_test_send env 0 0
+            run_test_send tb env 0 0
         else do
-            run_test_recv env 0 0
+            run_test_recv rb env 0 0
 
-run_test_send (env@Env {..}) 2 ret = return ret
-run_test_send (env@Env {..}) i 0 = return 0
-run_test_send (env@Env {..}) i _ = do
+run_test_send _ (env@Env {..}) 2 ret = return ret
+run_test_send _ (env@Env {..}) i 0 = return 0
+run_test_send tb (env@Env {..}) i _ = do
     print $ "Posting send for ctx: " ++ show i
-    poke tb[0] (datum + i)
+    poke tb (datum + i)
     (c'fi_send tx_ep[i] tx_buf tx_size mr_desc remote_rx_addr[i] nullPtr) |-> (wait_for_comp env txcq_array[i]) >>= \r -> env run_test_send (i + 1) r
 
-run_test_recv (env@Env {..}) 0 ret = return ret
-run_test_recv (env@Env {..}) i 0 = return 0
-run_test_recv (env@Env {..}) i _ = do
+run_test_recv _ (env@Env {..}) 0 ret = return ret
+run_test_recv _ (env@Env {..}) i 0 = return 0
+run_test_recv rb (env@Env {..}) i _ = do
     print $ "wait for recv completion for ctx: " ++ show i
     wait_for_comp env rxcq_array[i]
-    peek rb[0]  >>= \r -> run_test_recv env (i + 1) r
+    peek rb >>= \r -> run_test_recv env (i + 1) r
 
 {- run_test
 static int run_test()
@@ -379,8 +383,9 @@ init_fabric (env@Env {..}) = do
         then do
             fi' <- peek fi
             fi'' <- peek fi'
-            let domain_attr = c'domain_attr fi''
-            let ctxcnt = minimum [ctx_cnt, c'tx_ctx_cnt domain_attr, r'tx_ctx_cnt domain_attr]
+            let domain_attr = c'fi_info'domain_attr fi''
+            da <- peek domain_attr
+            let ctxcnt = minimum [fromIntegral $ ctx_cnt, c'fi_domain_attr'tx_ctx_cnt da, c'fi_domain_attr'rx_ctx_cnt da]
             if ctxcnt <= 0
                 then do
                     print "Provider doesn't support contexts"
@@ -542,28 +547,32 @@ scalable = do
     alloca $ \e'sep -> allocaArray 2 $ \e'tx_ep -> allocaArray 2 $ \e'rx_ep -> allocaArray 2 $ \e'txcq_array ->
         allocaArray 2 $ \e'rxcq_array -> alloca $ \e'remote_rx_addr -> alloca $ \e'cq_attr -> alloca $ \e'av_attr -> alloca $ \e'av ->
             alloca $ \e'hints -> alloca $ \e'fi -> alloca $ \e'domain ->
-                alloca $ \e'buf -> alloca $ \e'tx_buf -> alloca $ \e'rx_buf -> alloca $ \e'mr_desc -> do
-                    h <- c'fi_allocinfo
-                    poke e'hints h
-                    let env = Env 2
-                                0
-                                e'sep
-                                e'tx_ep
-                                e'rx_ep
-                                e'txcq_array
-                                e'rxcq_array
-                                e'remote_rx_addr
-                                e'cq_attr
-                                e'av_attr
-                                e'av
-                                e'hints
-                                e'fi
-                                e'domain
-                                e'buf
-                                e'tx_buf
-                                e'rx_buf
-                                e'mr_desc
-                    run env
+                alloca $ \e'buf -> alloca $ \e'tx_buf -> alloca $ \e'rx_buf -> alloca $ \e'mr_desc ->
+                    alloca $ \e'rx_size -> alloca $ \e'tx_size -> do
+                        h <- c'fi_allocinfo
+                        poke e'hints h
+                        let env = Env 2
+                                    0
+                                    e'sep
+                                    e'tx_ep
+                                    e'rx_ep
+                                    e'txcq_array
+                                    e'rxcq_array
+                                    e'remote_rx_addr
+                                    e'cq_attr
+                                    e'av_attr
+                                    e'av
+                                    e'hints
+                                    e'fi
+                                    e'domain
+                                    e'buf
+                                    e'tx_buf
+                                    e'rx_buf
+                                    e'mr_desc
+                                    0
+                                    e'rx_size
+                                    e'tx_size
+                        run env
 
     
 
