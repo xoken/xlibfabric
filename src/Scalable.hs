@@ -12,9 +12,9 @@ import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
 import System.Environment
-import XLibfabric.RDMA.Fabric hiding (C'fid_av, C'fid_cq, C'fid_domain, C'fid_ep, C'fid_eq, C'fid_pep)
+import XLibfabric.RDMA.Fabric hiding (C'fid_av, C'fid_cq, C'fid_ep, C'fid_eq, C'fid_pep)
 import XLibfabric.RDMA.FiCm
-import XLibfabric.RDMA.FiDomain hiding (C'fi_cq_attr)
+import XLibfabric.RDMA.FiDomain hiding (C'fi_cq_attr, C'fid_domain)
 import XLibfabric.RDMA.FiEndpoint
 import XLibfabric.RDMA.FiEq
 
@@ -32,11 +32,11 @@ data Env =
     Env
         { ctx_cnt :: CInt -- 2
         , rx_ctx_bits :: CInt -- 0
-        , sep :: Ptr C'fid_ep
-        , tx_ep :: (Ptr C'fid_ep)
-        , rx_ep :: (Ptr C'fid_ep)
-        , txcq_array :: (Ptr C'fid_cq)
-        , rxcq_array :: (Ptr C'fid_cq)
+        , sep :: Ptr (Ptr C'fid_ep)
+        , tx_ep :: Ptr (Ptr C'fid_ep)
+        , rx_ep :: Ptr (Ptr C'fid_ep)
+        , txcq_array :: Ptr (Ptr C'fid_cq)
+        , rxcq_array :: Ptr (Ptr C'fid_cq)
         , remote_rx_addr :: (Ptr C'fi_addr_t)
         , cq_attr :: Ptr C'fi_cq_attr
         , av_attr :: Ptr C'fi_av_attr
@@ -45,8 +45,8 @@ data Env =
         , fi :: Ptr (Ptr C'fi_info)
         , domain :: Ptr C'fid_domain
         , buf :: Ptr CChar
-        , tx_buf :: Ptr CChar
-        , rx_buf :: Ptr CChar
+        , tx_buf :: Ptr ()
+        , rx_buf :: Ptr ()
         , mr_desc :: Ptr ()
         , remote_fi_addr :: CULong
         , rx_size :: Ptr ()
@@ -92,10 +92,10 @@ closev_fid_cq p n = mapM_ (\i -> close_fid (p'fid_cq'fid $ advancePtr p i)) [0 .
 
 free_res :: Env -> IO ()
 free_res Env {..} = do
-    closev_fid_ep rx_ep $ fromIntegral ctx_cnt
-    closev_fid_ep tx_ep $ fromIntegral ctx_cnt
-    closev_fid_cq rxcq_array $ fromIntegral ctx_cnt
-    closev_fid_cq txcq_array $ fromIntegral ctx_cnt
+    peek rx_ep >>= \r -> closev_fid_ep r $ fromIntegral ctx_cnt
+    peek tx_ep >>= \t -> closev_fid_ep t $ fromIntegral ctx_cnt
+    peek rxcq_array >>= \r -> closev_fid_cq r $ fromIntegral ctx_cnt
+    peek txcq_array >>= \t -> closev_fid_cq t $ fromIntegral ctx_cnt
 
 {- free_res
 static void free_res(void)
@@ -137,19 +137,19 @@ alloc_ep_res (env@Env {..}) = do
         then do
             mapM_
                 (\i -> do
-                     (c'fi_tx_context sep i nullPtr (advancePtr tx_ep i) nullPtr)
-                     (c'fi_cq_open domain cq_attr (advancePtr txcq_array i) nullPtr)
-                     (c'fi_rx_context sep i nullPtr (advancePtr rx_ep i) nullPtr)
-                     (c'fi_cq_open domain cq_attr (advancePtr rxcq_array i) nullPtr))
-                [0 .. (ctx_cnt - 1)]
+                     (c'fi_tx_context sep i nullPtr (advancePtr tx_ep $ fromIntegral i) nullPtr)
+                     (c'fi_cq_open domain cq_attr (advancePtr txcq_array $ fromIntegral i) nullPtr)
+                     (c'fi_rx_context sep i nullPtr (advancePtr rx_ep $ fromIntegral i) nullPtr)
+                     (c'fi_cq_open domain cq_attr (advancePtr rxcq_array $ fromIntegral i) nullPtr))
+                [0 .. (ctx_cnt - 1)] >> return 0
         else return ret
 
-ctxShiftR :: (Int, Int) -> Int
+ctxShiftR :: (CInt, CInt) -> CInt
 ctxShiftR (c, r)
     | shifted <= 0 = r + 1
     | otherwise = ctxShiftR (c, r + 1)
   where
-    shifted = c `shiftR` r
+    shifted = c `shiftR` (fromIntegral $ r)
 
 {- alloc_ep_res
 static int alloc_ep_res(struct fid_ep *sep)
@@ -209,15 +209,17 @@ bind_ep_res (env@(Env {..})) = do
     (c'fi_scalable_ep_bind sep (p'fid_av'fid av) 0) |->
         (mapM_
              (\i ->
-                  (c'fi_ep_bind (advancePtr tx_ep i) (p'fid_cq'fid $ advancePtr txcq_array i) 2048) |->
-                  (c'fi_enable (advancePtr tx_ep i)))
+				peek tx_ep >>= \t -> peek txcq_array >>= \tcq -> 
+                  (c'fi_ep_bind (advancePtr t i) (p'fid_cq'fid $ advancePtr tcq i) 2048) |->
+                  (c'fi_enable (advancePtr t i)))
              [0 .. (fromIntegral $ ctx_cnt - 1)] >>
          return 0) |->
         (mapM_
              (\i ->
-                  (c'fi_ep_bind (advancePtr rx_ep i) (p'fid_cq'fid $ advancePtr rxcq_array i) 1024) |->
-                  (c'fi_enable (advancePtr rx_ep i)) |->
-                  (c'fi_recv (advancePtr rx_ep i) rx_buf (max rx_size 256) mr_desc 0 nullPtr))
+				peek rx_ep >>= \r -> peek rxcq_array >>= \rcq -> 
+                  (c'fi_ep_bind (advancePtr r i) (p'fid_cq'fid $ advancePtr rcq i) 1024) |->
+                  (c'fi_enable (advancePtr r i)) |->
+                  (c'fi_recv (advancePtr r i) rx_buf (fromIntegral $ max rx_size 256) mr_desc 0 nullPtr))
              [0 .. (fromIntegral $ ctx_cnt - 1)] >>
          return 0) |->
         (c'fi_enable sep)
@@ -326,15 +328,19 @@ run_test_send _ (env@Env {..}) i 0 = return 0
 run_test_send tb (env@Env {..}) i _ = do
     print $ "Posting send for ctx: " ++ show i
     poke tb (datum + i)
-    (c'fi_send (advancePtr tx_ep i) tx_buf tx_size mr_desc remote_rx_addr nullPtr) |->
-        (wait_for_comp env (advancePtr txcq_array i)) >>= \r -> env run_test_send (i + 1) r
+    t <- peek tx_ep
+    tcq <- peek txcq_array
+    rra <- peek $ advancePtr remote_rx_addr i
+    (c'fi_send (advancePtr t i) tx_buf tx_size mr_desc rra nullPtr) |->
+        (wait_for_comp env (advancePtr tcq i) >>= \r -> run_test_send tb env (i + 1) r)
 
-run_test_recv _ (env@Env {..}) 0 ret = return ret
-run_test_recv _ (env@Env {..}) i 0 = return 0
+run_test_recv _ _ 0 _ = return ret
+run_test_recv _ _ _ 0 = return 0
 run_test_recv rb (env@Env {..}) i _ = do
     print $ "wait for recv completion for ctx: " ++ show i
-    wait_for_comp env (advancePtr rxcq_array i)
-    peek rb >>= \r -> run_test_recv env (i + 1) r
+    rcq <- peek rxcq_array
+    wait_for_comp env (advancePtr rcq i)
+    peek rb >>= \r -> run_test_recv rb env (i + 1) r
 
 {- run_test
 static int run_test()
@@ -392,7 +398,7 @@ init_fabric (env@Env {..}) = do
                     let ep_attr_ptr = c'fi_info'ep_attr fi''
                     ep_attr <- peek ep_attr_ptr
                     poke ep_attr_ptr $ ep_attr {c'fi_ep_attr'tx_ctx_cnt = ctxcnt, c'fi_ep_attr'rx_ctx_cnt = ctxcnt}
-                    ft_open_fabric_res |-> (c'fi_scalable_ep domain fi sep nullPtr) |-> (poke sep >>= alloc_ep_res) |->
+                    ft_open_fabric_res |-> (c'fi_scalable_ep domain fi' sep nullPtr) |-> (alloc_ep_res env) |->
                         (bind_ep_res env)
         else return ret
 
