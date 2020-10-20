@@ -54,6 +54,8 @@ data Env =
         , fab :: Ptr (Ptr C'fid_fabric)
         , eq_attr :: (Ptr Eq.C'fi_eq_attr)
         , eq :: Ptr (Ptr C'fid_eq)
+        , info :: Ptr (Ptr C'fi_info)
+        , opts :: C'ft_opts
         }
 
 {-
@@ -677,8 +679,94 @@ retNonZero a b = do
         
 (|->) = retNonZero
 -}
--- shared.h
-ft_getinfo = undefined
+
+ft_getinfo = do
+    alloca $ \node -> alloca $ \service -> alloca $ \flags do
+        poke flags 0
+        ret <- ft_read_addr_opts node service hints flags opts
+        if ret /= 0
+            then return ret
+            else do
+                h <- peek hints
+                ea = c'fi_info'ep_attr $ h
+                ty = c'ep_attr'type ea
+                h' = h { c'fi_info'ep_attr = ea {c'ep_attr'type = 3}}
+                if ty == 0
+                    then poke hints h'
+                    else return ()
+                if c'ft_opts'options .&. 131072 == 0
+                    then do
+                        let caps = c'fi_info'caps h'
+                            mr_mode = c'domain_attr'mr_mode $ c'fi_info'domain_attr h'
+                            h'' = h' {c'fi_info'caps = caps .|. FI_HMEM, c'fi_info'domain_attr {domain_attr'mr_mode =mr_mode .|. FI_MR_HMEM}}
+                        then poke hints h''
+                    else
+                        return ()
+                c'fi_getinfo 65545 node service flags hints info
+
+{-
+int ft_getinfo(struct fi_info *hints, struct fi_info **info)
+{
+	char *node, *service;
+	uint64_t flags = 0;
+	int ret;
+
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
+
+	if (!hints->ep_attr->type)
+		hints->ep_attr->type = FI_EP_RDM;
+
+	if (opts.options & FT_OPT_ENABLE_HMEM) {
+		hints->caps |= FI_HMEM;
+		hints->domain_attr->mr_mode |= FI_MR_HMEM;
+	}
+
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
+	if (ret) {
+		FT_PRINTERR("fi_getinfo", ret);
+		return ret;
+	}
+
+	if (!ft_check_prefix_forced(*info, &opts)) {
+		FT_ERR("Provider disabled requested prefix mode.");
+		return -FI_ENODATA;
+	}
+
+	return 0;
+}
+-}
+
+ft_read_addr_opts
+
+{-
+int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
+		uint64_t *flags, struct ft_opts *opts)
+{
+	int ret;
+
+	if (opts->dst_addr && (opts->src_addr || !opts->oob_port)){
+		if (!opts->dst_port)
+			opts->dst_port = default_port;
+
+		ret = ft_getsrcaddr(opts->src_addr, opts->src_port, hints);
+		if (ret)
+			return ret;
+		*node = opts->dst_addr;
+		*service = opts->dst_port;
+	} else {
+		if (!opts->src_port)
+			opts->src_port = default_port;
+
+		*node = opts->src_addr;
+		*service = opts->src_port;
+		*flags = FI_SOURCE;
+	}
+
+	return 0;
+}
+-}
 
 ft_av_insert a b c d e f = do
     ret <- c'fi_av_insert a b c d e f
@@ -713,6 +801,7 @@ int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr
     return 0;
 }
 -}
+
 ft_open_fabric_res Env {..} = do
     fi' <- peek fi
     fi'' <- peek fi'
