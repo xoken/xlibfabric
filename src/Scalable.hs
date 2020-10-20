@@ -124,7 +124,7 @@ static void free_res(void)
 -}
 ft_alloc_ep_res a = return 0
 
-alloc_ep_res :: Env -> IO CInt
+--alloc_ep_res :: Env -> IO CInt
 alloc_ep_res (env@Env {..}) = do
     poke (p'fi_av_attr'rx_ctx_bits av_attr) $ ctxShiftR (ctx_cnt, rx_ctx_bits)
     ret <- ft_alloc_ep_res fi
@@ -298,7 +298,7 @@ doWhile a f = do
     a' <- a
     if f a'
         then doWhile a f
-        else return a'
+        else return $ fst a'
 
 {- wait_for_comp
 static int wait_for_comp(struct fid_cq *cq)
@@ -328,7 +328,7 @@ run_test (env@Env {..}) = do
         else do
             run_test_recv rb env 0 0
 
-run_test_send _ (env@Env {..}) 2 ret = return ret
+run_test_send _ (env@Env {..}) 2 ret = return $ fromIntegral ret
 run_test_send _ (env@Env {..}) i 0 = return 0
 run_test_send tb (env@Env {..}) i _ = do
     print $ "Posting send for ctx: " ++ show i
@@ -384,7 +384,7 @@ static int run_test()
 	return ret;
 }
 -}
-init_fabric :: Env -> IO CInt
+--init_fabric :: Env -> IO CInt
 init_fabric (env@Env {..}) = do
     ret <- ft_getinfo hints fi
     if ret == 0
@@ -456,7 +456,7 @@ init_av (env@Env {..})
 init_av_a (env@Env {..}) = do
     alloca $ \addrlen -> do
         t <- peek tx_ep
-        poke 256 addrlen
+        poke addrlen 256
         s <- peek sep
         rcq <- peek rxcq_array
         (ft_av_insert av c'fi_info'dest_addr 1 remote_fi_addr 0 nullPtr) |->
@@ -467,7 +467,7 @@ init_av_a (env@Env {..}) = do
 init_av_b (env@Env {..}) = do
     t <- peek tx_ep
     rcq <- peek rxcq_array
-    (wait_for_comp env rcq) |-> (ft_av_insert av rx_buf 1 remote_fi_addr 0 nullPtr) |->
+    ((wait_for_comp env rcq) |-> (ft_av_insert av rx_buf 1 remote_fi_addr 0 nullPtr)) |->
         (c'fi_send t tx_buf 1 mr_desc remote_fi_addr nullPtr)
 
 {- init_av
@@ -528,8 +528,8 @@ static int init_av(void)
 	return ret;
 }
 -}
-run :: Env -> IO CInt
-run env = init_fabric env |-> init_av env |-> run_test env
+run :: Env -> IO CLong
+run env = (init_fabric env) |-> (init_av env) |-> (run_test env)
 
 {- run
 static int run(void)
@@ -598,7 +598,7 @@ scalable = do
                                                                                         0
                                                                                         256
                                                                                         256
-                                                                            run env >> return 0
+                                                                            run env >> return ()
 
 {- main
 int main(int argc, char **argv)
@@ -642,17 +642,26 @@ int main(int argc, char **argv)
 }
 -}
 -- Utils
+(|->) :: (Integral a, Num b) => IO a -> IO b -> IO b
+a |-> b = do
+	a' <- a
+	case a' of
+		0 -> return $ fromIntegral a'
+		_ -> b
+
+{-
 retNonZero :: (Integral a, Eq a) => IO a -> IO b -> IO b
 retNonZero a b = do
     a' <- a
     if a' == 0
         then b
-        else return $ fromIntegral a'
-
+		else return $ fromIntegral a'
+		
 (|->) = retNonZero
+-}
 
 -- shared.h
-ft_getinfo = return 0
+ft_getinfo = undefined
 
 ft_av_insert a b c d e f = return 0
 
@@ -675,7 +684,8 @@ int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr
 	return 0;
 }
 -}
-ft_open_fabric_res = return 0 --ft_open_fabric_res = (fi_fabric (c'fi_info'fabric_attr fi) fab nullPtr) |-> fi_eq_open |-> fi_domain
+ft_open_fabric_res = return 0 --
+ft_open_fabric_res = (fi_fabric (c'fi_info'fabric_attr fi) fab nullPtr) |-> (fi_eq_open fab eq_attr eq nullPtr) |-> (fi_domain fab fi domain nullPtr)
 {-
 int ft_open_fabric_res(void)
 {
