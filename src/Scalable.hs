@@ -135,11 +135,12 @@ alloc_ep_res (env@Env {..}) = do
             --rx_ep = calloc(ctx_cnt, sizeof *rx_ep);
             --remote_rx_addr = calloc(ctx_cnt, sizeof *remote_rx_addr);
         then do
+            s <- peek sep
             mapM_
                 (\i -> do
-                     (c'fi_tx_context sep i nullPtr (advancePtr tx_ep $ fromIntegral i) nullPtr)
+                     (c'fi_tx_context s i nullPtr (advancePtr tx_ep $ fromIntegral i) nullPtr)
                      (c'fi_cq_open domain cq_attr (advancePtr txcq_array $ fromIntegral i) nullPtr)
-                     (c'fi_rx_context sep i nullPtr (advancePtr rx_ep $ fromIntegral i) nullPtr)
+                     (c'fi_rx_context s i nullPtr (advancePtr rx_ep $ fromIntegral i) nullPtr)
                      (c'fi_cq_open domain cq_attr (advancePtr rxcq_array $ fromIntegral i) nullPtr))
                 [0 .. (ctx_cnt - 1)] >> return 0
         else return ret
@@ -206,6 +207,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 }
 -}
 bind_ep_res (env@(Env {..})) = do
+    s <- peek sep
     (c'fi_scalable_ep_bind sep (p'fid_av'fid av) 0) |->
         (mapM_
              (\i ->
@@ -222,7 +224,7 @@ bind_ep_res (env@(Env {..})) = do
                   (c'fi_recv (advancePtr r i) rx_buf (fromIntegral $ max rx_size 256) mr_desc 0 nullPtr))
              [0 .. (fromIntegral $ ctx_cnt - 1)] >>
          return 0) |->
-        (c'fi_enable sep)
+        (c'fi_enable s)
     return 0
 
 {- bind_ep_res
@@ -334,7 +336,7 @@ run_test_send tb (env@Env {..}) i _ = do
     (c'fi_send (advancePtr t i) tx_buf tx_size mr_desc rra nullPtr) |->
         (wait_for_comp env (advancePtr tcq i) >>= \r -> run_test_send tb env (i + 1) r)
 
-run_test_recv _ _ 0 _ = return ret
+run_test_recv _ _ 0 ret = return ret
 run_test_recv _ _ _ 0 = return 0
 run_test_recv rb (env@Env {..}) i _ = do
     print $ "wait for recv completion for ctx: " ++ show i
@@ -442,20 +444,26 @@ static int init_fabric(void)
 init_av (env@Env {..})
     -- based on opts do init_av_a or init_av_b
  = do
+    r <- peek rx_ep
+    tcq <- peek txcq_array
     (mapM_ (\x -> c'fi_rx_addr remote_fi_addr x rx_ctx_bits) [0 .. (ctx_cnt - 1)] >>
-     c'fi_recv rx_ep rx_buf rx_size mr_desc 0 nullPtr) |->
-        (wait_for_comp env txcq_array)
+     c'fi_recv r rx_buf rx_size mr_desc 0 nullPtr) |->
+        (wait_for_comp env tcq)
 
 init_av_a (env@Env {..}) = do
     alloca $ \addrlen -> do
         poke 256 addrlen
-        (ft_av_insert av c'fi_info'dest_addr 1 remote_fi_addr 0 nullPtr) |-> (c'fi_getname p'fid_ep'fid tx_buf addrlen) |->
-            (peek addrlen >>= \al -> c'fi_send tx_ep tx_buf al mr_desc remote_fi_addr nullPtr) |->
-            (wait_for_comp env rxcq_array)
+        s <- peek sep
+        rcq <- peek rxcq_array
+        (ft_av_insert av c'fi_info'dest_addr 1 remote_fi_addr 0 nullPtr) |-> (c'fi_getname (p'fid_ep'fid s) tx_buf addrlen) |->
+            (peek addrlen >>= \al -> c'fi_send t tx_buf al mr_desc remote_fi_addr nullPtr) |->
+            (wait_for_comp env rcq)
 
 init_av_b (env@Env {..}) = do
-    (wait_for_comp env rxcq_array) |-> (ft_av_insert av rx_buf 1 remote_fi_addr 0 nullPtr) |->
-        (c'fi_send tx_ep tx_buf 1 mr_desc remote_fi_addr nullPtr)
+    t <- peek tx_ep
+    rcq <- peek rxcq_array
+    (wait_for_comp env rcq) |-> (ft_av_insert av rx_buf 1 remote_fi_addr 0 nullPtr) |->
+        (c'fi_send t tx_buf 1 mr_desc remote_fi_addr nullPtr)
 
 {- init_av
 static int init_av(void)
@@ -640,7 +648,7 @@ retNonZero a b = do
 -- shared.h
 ft_getinfo = return 0
 
-ft_av_insert = return 0
+ft_av_insert a b c d e f = return 0
 
 {-
 int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr,
