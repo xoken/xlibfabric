@@ -12,9 +12,9 @@ import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
 import System.Environment
-import XLibfabric.RDMA.Fabric hiding (C'fid_av, C'fid_cq, C'fid_ep, C'fid_eq, C'fid_pep)
+import XLibfabric.RDMA.Fabric hiding (C'fid_av, C'fid_cq, C'fid_domain, C'fid_ep, C'fid_eq, C'fid_pep)
 import XLibfabric.RDMA.FiCm
-import XLibfabric.RDMA.FiDomain hiding (C'fi_cq_attr, C'fid_domain)
+import XLibfabric.RDMA.FiDomain as FD hiding (C'fi_cq_attr)
 import XLibfabric.RDMA.FiEndpoint
 import XLibfabric.RDMA.FiEq
 
@@ -43,14 +43,14 @@ data Env =
         , av :: Ptr C'fid_av
         , hints :: Ptr (Ptr C'fi_info)
         , fi :: Ptr (Ptr C'fi_info)
-        , domain :: Ptr C'fid_domain
+        , domain :: Ptr FD.C'fid_domain
         , buf :: Ptr CChar
         , tx_buf :: Ptr ()
         , rx_buf :: Ptr ()
         , mr_desc :: Ptr ()
         , remote_fi_addr :: CULong
-        , rx_size :: Ptr ()
-        , tx_size :: Ptr ()
+        , rx_size :: CSize
+        , tx_size :: CSize
         }
 
 {-
@@ -142,7 +142,8 @@ alloc_ep_res (env@Env {..}) = do
                      (c'fi_cq_open domain cq_attr (advancePtr txcq_array $ fromIntegral i) nullPtr)
                      (c'fi_rx_context s i nullPtr (advancePtr rx_ep $ fromIntegral i) nullPtr)
                      (c'fi_cq_open domain cq_attr (advancePtr rxcq_array $ fromIntegral i) nullPtr))
-                [0 .. (ctx_cnt - 1)] >> return 0
+                [0 .. (ctx_cnt - 1)] >>
+                return 0
         else return ret
 
 ctxShiftR :: (CInt, CInt) -> CInt
@@ -208,20 +209,22 @@ static int alloc_ep_res(struct fid_ep *sep)
 -}
 bind_ep_res (env@(Env {..})) = do
     s <- peek sep
-    (c'fi_scalable_ep_bind sep (p'fid_av'fid av) 0) |->
+    (c'fi_scalable_ep_bind s (p'fid_av'fid av) 0) |->
         (mapM_
              (\i ->
-				peek tx_ep >>= \t -> peek txcq_array >>= \tcq -> 
-                  (c'fi_ep_bind (advancePtr t i) (p'fid_cq'fid $ advancePtr tcq i) 2048) |->
-                  (c'fi_enable (advancePtr t i)))
+                  peek tx_ep >>= \t ->
+                      peek txcq_array >>= \tcq ->
+                          (c'fi_ep_bind (advancePtr t i) (p'fid_cq'fid $ advancePtr tcq i) 2048) |->
+                          (c'fi_enable (advancePtr t i)))
              [0 .. (fromIntegral $ ctx_cnt - 1)] >>
          return 0) |->
         (mapM_
              (\i ->
-				peek rx_ep >>= \r -> peek rxcq_array >>= \rcq -> 
-                  (c'fi_ep_bind (advancePtr r i) (p'fid_cq'fid $ advancePtr rcq i) 1024) |->
-                  (c'fi_enable (advancePtr r i)) |->
-                  (c'fi_recv (advancePtr r i) rx_buf (fromIntegral $ max rx_size 256) mr_desc 0 nullPtr))
+                  peek rx_ep >>= \r ->
+                      peek rxcq_array >>= \rcq ->
+                          (c'fi_ep_bind (advancePtr r i) (p'fid_cq'fid $ advancePtr rcq i) 1024) |->
+                          (c'fi_enable (advancePtr r i)) |->
+                          (c'fi_recv (advancePtr r i) rx_buf (fromIntegral $ max rx_size 256) mr_desc 0 nullPtr))
              [0 .. (fromIntegral $ ctx_cnt - 1)] >>
          return 0) |->
         (c'fi_enable s)
@@ -452,10 +455,12 @@ init_av (env@Env {..})
 
 init_av_a (env@Env {..}) = do
     alloca $ \addrlen -> do
+        t <- peek tx_ep
         poke 256 addrlen
         s <- peek sep
         rcq <- peek rxcq_array
-        (ft_av_insert av c'fi_info'dest_addr 1 remote_fi_addr 0 nullPtr) |-> (c'fi_getname (p'fid_ep'fid s) tx_buf addrlen) |->
+        (ft_av_insert av c'fi_info'dest_addr 1 remote_fi_addr 0 nullPtr) |->
+            (c'fi_getname (p'fid_ep'fid s) tx_buf addrlen) |->
             (peek addrlen >>= \al -> c'fi_send t tx_buf al mr_desc remote_fi_addr nullPtr) |->
             (wait_for_comp env rcq)
 
@@ -564,10 +569,11 @@ scalable = do
                                                     alloca $ \e'buf ->
                                                         alloca $ \e'tx_buf ->
                                                             alloca $ \e'rx_buf ->
-                                                                alloca $ \e'mr_desc ->
-                                                                    alloca $ \e'rx_size ->
-                                                                        alloca $ \e'tx_size -> do
-                                                                            h <- c'fi_allocinfo
+                                                                alloca $ \e'mr_desc -> do
+                                                                    h <- c'fi_allocinfo
+                                                                    if h == nullPtr
+                                                                        then print "EXIT FAILURE"
+                                                                        else do
                                                                             poke e'hints h
                                                                             let env =
                                                                                     Env
@@ -590,8 +596,8 @@ scalable = do
                                                                                         e'rx_buf
                                                                                         e'mr_desc
                                                                                         0
-                                                                                        e'rx_size
-                                                                                        e'tx_size
+                                                                                        256
+                                                                                        256
                                                                             run env >> return 0
 
 {- main
@@ -636,12 +642,12 @@ int main(int argc, char **argv)
 }
 -}
 -- Utils
-retNonZero :: (Num a, Eq a) => IO a -> IO a -> IO a
+retNonZero :: (Integral a, Eq a) => IO a -> IO b -> IO b
 retNonZero a b = do
     a' <- a
     if a' == 0
         then b
-        else return a'
+        else return $ fromIntegral a'
 
 (|->) = retNonZero
 
