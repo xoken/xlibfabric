@@ -16,7 +16,7 @@ import XLibfabric.RDMA.Fabric hiding (C'fid_av, C'fid_cq, C'fid_domain, C'fid_ep
 import XLibfabric.RDMA.FiCm
 import XLibfabric.RDMA.FiDomain as FD hiding (C'fi_cq_attr)
 import XLibfabric.RDMA.FiEndpoint
-import XLibfabric.RDMA.FiEq
+import XLibfabric.RDMA.FiEq as Eq
 
 {- GLOBAL VARS
 static int ctx_cnt = 2;
@@ -43,14 +43,17 @@ data Env =
         , av :: Ptr C'fid_av
         , hints :: Ptr (Ptr C'fi_info)
         , fi :: Ptr (Ptr C'fi_info)
-        , domain :: Ptr FD.C'fid_domain
+        , domain :: Ptr (Ptr FD.C'fid_domain)
         , buf :: Ptr CChar
         , tx_buf :: Ptr ()
         , rx_buf :: Ptr ()
         , mr_desc :: Ptr ()
         , remote_fi_addr :: CULong
         , rx_size :: CSize
-        , tx_size :: CSize
+		, tx_size :: CSize
+		, fab :: Ptr (Ptr C'fid_fabric)
+		, eq_attr :: (Ptr Eq.C'fi_eq_attr)
+		, eq :: Ptr (Ptr C'fid_eq)
         }
 
 {-
@@ -138,10 +141,11 @@ alloc_ep_res (env@Env {..}) = do
             s <- peek sep
             mapM_
                 (\i -> do
+                     d <- peek domain
                      (c'fi_tx_context s i nullPtr (advancePtr tx_ep $ fromIntegral i) nullPtr)
-                     (c'fi_cq_open domain cq_attr (advancePtr txcq_array $ fromIntegral i) nullPtr)
+                     (c'fi_cq_open d cq_attr (advancePtr txcq_array $ fromIntegral i) nullPtr)
                      (c'fi_rx_context s i nullPtr (advancePtr rx_ep $ fromIntegral i) nullPtr)
-                     (c'fi_cq_open domain cq_attr (advancePtr rxcq_array $ fromIntegral i) nullPtr))
+                     (c'fi_cq_open d cq_attr (advancePtr rxcq_array $ fromIntegral i) nullPtr))
                 [0 .. (ctx_cnt - 1)] >>
                 return 0
         else return ret
@@ -403,7 +407,7 @@ init_fabric (env@Env {..}) = do
                     let ep_attr_ptr = c'fi_info'ep_attr fi''
                     ep_attr <- peek ep_attr_ptr
                     poke ep_attr_ptr $ ep_attr {c'fi_ep_attr'tx_ctx_cnt = ctxcnt, c'fi_ep_attr'rx_ctx_cnt = ctxcnt}
-                    ft_open_fabric_res |-> (c'fi_scalable_ep domain fi' sep nullPtr) |-> (alloc_ep_res env) |->
+                    ft_open_fabric_res env |-> (c'fi_scalable_ep domain fi' sep nullPtr) |-> (alloc_ep_res env) |->
                         (bind_ep_res env)
         else return ret
 
@@ -569,36 +573,43 @@ scalable = do
                                                     alloca $ \e'buf ->
                                                         alloca $ \e'tx_buf ->
                                                             alloca $ \e'rx_buf ->
-                                                                alloca $ \e'mr_desc -> do
-                                                                    h <- c'fi_allocinfo
-                                                                    if h == nullPtr
-                                                                        then print "EXIT FAILURE"
-                                                                        else do
-                                                                            poke e'hints h
-                                                                            let env =
-                                                                                    Env
-                                                                                        2
-                                                                                        0
-                                                                                        e'sep
-                                                                                        e'tx_ep
-                                                                                        e'rx_ep
-                                                                                        e'txcq_array
-                                                                                        e'rxcq_array
-                                                                                        e'remote_rx_addr
-                                                                                        e'cq_attr
-                                                                                        e'av_attr
-                                                                                        e'av
-                                                                                        e'hints
-                                                                                        e'fi
-                                                                                        e'domain
-                                                                                        e'buf
-                                                                                        e'tx_buf
-                                                                                        e'rx_buf
-                                                                                        e'mr_desc
-                                                                                        0
-                                                                                        256
-                                                                                        256
-                                                                            run env >> return ()
+                                                                alloca $ \e'mr_desc -> 
+																	alloca $ \e'fab ->
+																		alloca $ \e'eq_attr ->
+																			alloca $ \e'eq ->do
+																					poke e'eq_attr (Eq.C'fi_eq_attr 0 0 1 0 nullPtr)
+																					h <- c'fi_allocinfo
+																					if h == nullPtr
+																						then print "EXIT FAILURE"
+																						else do
+																							poke e'hints h
+																							let env =
+																									Env
+																										2
+																										0
+																										e'sep
+																										e'tx_ep
+																										e'rx_ep
+																										e'txcq_array
+																										e'rxcq_array
+																										e'remote_rx_addr
+																										e'cq_attr
+																										e'av_attr
+																										e'av
+																										e'hints
+																										e'fi
+																										e'domain
+																										e'buf
+																										e'tx_buf
+																										e'rx_buf
+																										e'mr_desc
+																										0
+																										256
+																										256
+																										e'fab
+																										e'eq_attr
+																										e'eq
+																							run env >> return ()
 
 {- main
 int main(int argc, char **argv)
@@ -684,8 +695,11 @@ int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr
 	return 0;
 }
 -}
-ft_open_fabric_res = return 0 --
-ft_open_fabric_res = (fi_fabric (c'fi_info'fabric_attr fi) fab nullPtr) |-> (fi_eq_open fab eq_attr eq nullPtr) |-> (fi_domain fab fi domain nullPtr)
+ft_open_fabric_res Env {..} = do
+	fi' <- peek fi
+	fi'' <- peek fi'
+	fab' <- peek fab
+	(c'fi_fabric (c'fi_info'fabric_attr fi'') fab nullPtr) |-> (c'fi_eq_open fab' eq_attr eq nullPtr) |-> (c'fi_domain fab' fi' domain nullPtr)
 {-
 int ft_open_fabric_res(void)
 {
