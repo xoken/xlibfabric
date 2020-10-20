@@ -2,35 +2,28 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-
 module Scalable where
 
 import Data.Bits (shiftR)
-import Foreign.Marshal.Array
-import Foreign.Marshal.Alloc
-import Foreign.Storable
 import Foreign.C.String
 import Foreign.C.Types
+import Foreign.Marshal.Alloc
+import Foreign.Marshal.Array
 import Foreign.Ptr
+import Foreign.Storable
 import System.Environment
-import XLibfabric.RDMA.Fabric hiding (C'fid_cq, C'fid_ep, C'fid_pep, C'fid_eq, C'fid_av, C'fid_domain)
-import XLibfabric.RDMA.FiEndpoint
-import XLibfabric.RDMA.FiEq
+import XLibfabric.RDMA.Fabric hiding
+  ( C'fid_av
+  , C'fid_cq
+  , C'fid_domain
+  , C'fid_ep
+  , C'fid_eq
+  , C'fid_pep
+  )
 import XLibfabric.RDMA.FiCm
 import XLibfabric.RDMA.FiDomain hiding (C'fi_cq_attr)
-
-{- IMPORTS
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <getopt.h>
-
-#include <rdma/fi_errno.h>
-#include <rdma/fi_endpoint.h>
-#include <rdma/fi_cm.h>
-
-#include <shared.h>
--}
+import XLibfabric.RDMA.FiEndpoint
+import XLibfabric.RDMA.FiEq
 
 {- GLOBAL VARS
 static int ctx_cnt = 2;
@@ -40,32 +33,33 @@ static struct fid_ep **tx_ep, **rx_ep;
 static struct fid_cq **txcq_array;
 static struct fid_cq **rxcq_array;
 static fi_addr_t *remote_rx_addr;
-#define DATA 0x12345670
+DATA 0x12345670
 -}
+data Env =
+  Env
+    { ctx_cnt :: CInt -- 2
+    , rx_ctx_bits :: CInt -- 0
+    , sep :: Ptr C'fid_ep
+    , tx_ep :: (Ptr C'fid_ep)
+    , rx_ep :: (Ptr C'fid_ep)
+    , txcq_array :: (Ptr C'fid_cq)
+    , rxcq_array :: (Ptr C'fid_cq)
+    , remote_rx_addr :: (Ptr C'fi_addr_t)
+    , cq_attr :: Ptr C'fi_cq_attr
+    , av_attr :: Ptr C'fi_av_attr
+    , av :: Ptr C'fid_av
+    , hints :: Ptr (Ptr C'fi_info)
+    , fi :: Ptr (Ptr C'fi_info)
+    , domain :: Ptr C'fid_domain
+    , buf :: Ptr CChar
+    , tx_buf :: Ptr CChar
+    , rx_buf :: Ptr CChar
+    , mr_desc :: Ptr ()
+    , remote_fi_addr :: CULong
+    , rx_size :: Ptr ()
+    , tx_size :: Ptr ()
+    }
 
-data Env = Env {
-    ctx_cnt :: CInt -- 2
-   ,rx_ctx_bits :: CInt -- 0
-   ,sep :: Ptr C'fid_ep
-   ,tx_ep :: Ptr (Ptr C'fid_ep)
-   ,rx_ep :: Ptr (Ptr C'fid_ep)
-   ,txcq_array :: Ptr (Ptr C'fid_cq)
-   ,rxcq_array :: Ptr (Ptr C'fid_cq)
-   ,remote_rx_addr :: (Ptr C'fi_addr_t)
-   ,cq_attr :: Ptr C'fi_cq_attr
-   ,av_attr :: Ptr C'fi_av_attr
-   ,av :: Ptr C'fid_av
-   ,hints :: Ptr (Ptr C'fi_info)
-   ,fi :: Ptr (Ptr C'fi_info)
-   ,domain :: Ptr C'fid_domain
-   ,buf :: Ptr CChar
-   ,tx_buf :: Ptr CChar
-   ,rx_buf :: Ptr CChar
-   ,mr_desc :: Ptr ()
-   ,remote_fi_addr :: CULong
-   ,rx_size :: Ptr ()
-   ,tx_size :: Ptr ()
-}
 {-
 defEnv = do
     alloca $ \e'sep -> allocaArray 2 $ \e'tx_ep -> allocaArray 2 $ \e'rx_ep -> allocaArray 2 $ \e'txcq_array ->
@@ -90,23 +84,25 @@ defEnv = do
                                 e'rx_buf
                                 e'mr_desc
                     return env-}
-
 datum = 0x12345670
 
-closev_fid :: [Ptr C'fid_ep] -> IO ()
-closev_fid = mapM_ close_fid
+closev_fid_ep :: Ptr C'fid_ep -> Int -> IO ()
+closev_fid_ep p n = mapM_ (\i -> close_fid (p'fid_ep'fid $ advancePtr p i)) [0 .. (n - 1)]
 
-close_fid :: Ptr C'fid_ep -> IO ()
-close_fid fep = do
-    ret <- c'fi_close $ p'fid_ep'fid fep
-    print ret
+close_fid :: Ptr C'fid -> IO ()
+close_fid fid = do
+  ret <- c'fi_close $ fid
+  print ret
+
+closev_fid_cq :: Ptr C'fid_cq -> Int -> IO ()
+closev_fid_cq p n = mapM_ (\i -> close_fid (p'fid_cq'fid $ advancePtr p i)) [0 .. (n - 1)]
 
 free_res :: Env -> IO ()
 free_res Env {..} = do
-    closev_fid rx_ep ctx_cnt
-    closev_fid tx_ep ctx_cnt
-    closev_fid rxcq_array ctx_cnt
-    closev_fid txcq_array ctx_cnt
+  closev_fid_ep rx_ep $ fromIntegral ctx_cnt
+  closev_fid_ep tx_ep $ fromIntegral ctx_cnt
+  closev_fid_cq rxcq_array $ fromIntegral ctx_cnt
+  closev_fid_cq txcq_array $ fromIntegral ctx_cnt
 
 {- free_res
 static void free_res(void)
@@ -133,33 +129,52 @@ static void free_res(void)
 	}
 }
 -}
-
 ft_alloc_ep_res a = return 0
 
 alloc_ep_res :: Env -> IO CInt
 alloc_ep_res (env@Env {..}) = do
-    poke (p'fi_av_attr'rx_ctx_bits av_attr) $ ctxShiftR (ctx_cnt, rx_ctx_bits)
-    ret <- ft_alloc_ep_res fi
-    if ret == 0
-        then do
+  poke (p'fi_av_attr'rx_ctx_bits av_attr) $ ctxShiftR (ctx_cnt, rx_ctx_bits)
+  ret <- ft_alloc_ep_res fi
+  if ret == 0
             --txcq_array = calloc(ctx_cnt, sizeof *txcq_array);
             --rxcq_array = calloc(ctx_cnt, sizeof *rxcq_array);
             --tx_ep = calloc(ctx_cnt, sizeof *tx_ep);
             --rx_ep = calloc(ctx_cnt, sizeof *rx_ep);
             --remote_rx_addr = calloc(ctx_cnt, sizeof *remote_rx_addr);
-            mapM_ (\i -> do
-                            (c'fi_tx_context sep i nullPtr (plusPtr tx_ep (i*(sizeOf tx_ep))) nullPtr)
-                            (c'fi_cq_open domain cq_attr (plusPtr txcq_array (i*(sizeOf txcq_array))) nullPtr)
-                            (c'fi_rx_context sep i nullPtr (plusPtr rx_ep (i*(sizeOf rx_ep))) nullPtr)
-                            (c'fi_cq_open domain cq_attr (plusPtr rxcq_array (i*(sizeOf rxcq_array))) nullPtr))
-                  [0 .. (ctx_cnt - 1)]     
-        else
-            return ret
+    then do
+      mapM_
+        (\i -> do
+           (c'fi_tx_context
+              sep
+              i
+              nullPtr
+              (advancePtr tx_ep i)
+              nullPtr)
+           (c'fi_cq_open
+              domain
+              cq_attr
+              (advancePtr txcq_array i)
+              nullPtr)
+           (c'fi_rx_context
+              sep
+              i
+              nullPtr
+              (advancePtr rx_ep i)
+              nullPtr)
+           (c'fi_cq_open
+              domain
+              cq_attr
+              (advancePtr rxcq_array i)
+              nullPtr))
+        [0 .. (ctx_cnt - 1)]
+    else return ret
 
 ctxShiftR :: (Int, Int) -> Int
-ctxShiftR (c,r) | shifted <= 0 = r+1
-                | otherwise = ctxShiftR (c,r+1)
-                where shifted = c `shiftR` r
+ctxShiftR (c, r)
+  | shifted <= 0 = r + 1
+  | otherwise = ctxShiftR (c, r + 1)
+  where
+    shifted = c `shiftR` r
 
 {- alloc_ep_res
 static int alloc_ep_res(struct fid_ep *sep)
@@ -215,13 +230,33 @@ static int alloc_ep_res(struct fid_ep *sep)
 	return 0;
 }
 -}
-
 bind_ep_res (env@(Env {..})) = do
-    return 0
-    --(fi_scalable_ep_bind sep (p'fid_av'fid av) 0) |->
-    --mapM_ (\i -> (fi_ep_bind) |-> fi_enable) [0 .. (ctx_cnt - 1)] |->
-    --(fi_ep_bind |-> fi_enable |-> fi_recv) |->
-    --fi_enable
+  (c'fi_scalable_ep_bind sep (p'fid_av'fid av) 0) |->
+    (mapM_
+       (\i ->
+          (c'fi_ep_bind
+             (advancePtr tx_ep i)
+             (p'fid_cq'fid $ advancePtr txcq_array i)
+             2048) |->
+          (c'fi_enable (advancePtr tx_ep i)))
+       [0 .. (fromIntegral $ ctx_cnt - 1)] >> return 0) |->
+    (mapM_
+       (\i ->
+          (c'fi_ep_bind
+             (advancePtr rx_ep i)
+             (p'fid_cq'fid $ advancePtr rxcq_array i)
+             1024) |->
+          (c'fi_enable (advancePtr rx_ep i)) |->
+          (c'fi_recv
+             (advancePtr rx_ep i)
+             rx_buf
+             (max rx_size 256)
+             mr_desc
+             0
+             nullPtr))
+       [0 .. (fromIntegral $ ctx_cnt - 1)] >> return 0) |->
+	(c'fi_enable sep)
+  return 0
 
 {- bind_ep_res
 static int bind_ep_res(void)
@@ -278,22 +313,23 @@ static int bind_ep_res(void)
 	return 0;
 }
 -}
-
 wait_for_comp (env@Env {..}) cq = do
-    alloca $ \comp -> do
-        ret <- doWhile (fmap (\x -> (x, -11)) (c'fi_cq_read cq comp 1)) (\(x,ret) -> x < 0 && ret == -11)
-        if ret /= 1
-            then do
-                print $ "fi_cq_read: " <> show ret
-                return ret
-            else
-                return 0 
-            
+  alloca $ \comp -> do
+    ret <-
+      doWhile
+        (fmap (\x -> (x, -11)) (c'fi_cq_read cq comp 1))
+        (\(x, ret) -> x < 0 && ret == -11)
+    if ret /= 1
+      then do
+        print $ "fi_cq_read: " <> show ret
+        return ret
+      else return 0
+
 doWhile a f = do
-    a' <- a
-    if f a'
-        then doWhile a f
-        else return a'
+  a' <- a
+  if f a'
+    then doWhile a f
+    else return a'
 
 {- wait_for_comp
 static int wait_for_comp(struct fid_cq *cq)
@@ -313,30 +349,30 @@ static int wait_for_comp(struct fid_cq *cq)
 	return ret;
 }
 -}
-
 run_test (env@Env {..}) = do
-    let ret = 0
-        tb = castPtr tx_buf
-        rb = castPtr rx_buf
-    if True -- (opts.dst_addr)
-        then do
-            run_test_send tb env 0 0
-        else do
-            run_test_recv rb env 0 0
+  let ret = 0
+      tb = castPtr tx_buf
+      rb = castPtr rx_buf
+  if True -- (opts.dst_addr)
+    then do
+      run_test_send tb env 0 0
+    else do
+      run_test_recv rb env 0 0
 
 run_test_send _ (env@Env {..}) 2 ret = return ret
 run_test_send _ (env@Env {..}) i 0 = return 0
 run_test_send tb (env@Env {..}) i _ = do
-    print $ "Posting send for ctx: " ++ show i
-    poke tb (datum + i)
-    (c'fi_send tx_ep[i] tx_buf tx_size mr_desc remote_rx_addr[i] nullPtr) |-> (wait_for_comp env txcq_array[i]) >>= \r -> env run_test_send (i + 1) r
+  print $ "Posting send for ctx: " ++ show i
+  poke tb (datum + i)
+  (c'fi_send (advancePtr tx_ep i) tx_buf tx_size mr_desc remote_rx_addr nullPtr) |->
+    (wait_for_comp env (advancePtr txcq_array i)) >>= \r -> env run_test_send (i + 1) r
 
 run_test_recv _ (env@Env {..}) 0 ret = return ret
 run_test_recv _ (env@Env {..}) i 0 = return 0
 run_test_recv rb (env@Env {..}) i _ = do
-    print $ "wait for recv completion for ctx: " ++ show i
-    wait_for_comp env rxcq_array[i]
-    peek rb >>= \r -> run_test_recv env (i + 1) r
+  print $ "wait for recv completion for ctx: " ++ show i
+  wait_for_comp env (advancePtr rxcq_array i)
+  peek rb >>= \r -> run_test_recv env (i + 1) r
 
 {- run_test
 static int run_test()
@@ -375,31 +411,37 @@ static int run_test()
 	return ret;
 }
 -}
-
 init_fabric :: Env -> IO CInt
 init_fabric (env@Env {..}) = do
-    ret <- ft_getinfo hints fi
-    if ret == 0
+  ret <- ft_getinfo hints fi
+  if ret == 0
+    then do
+      fi' <- peek fi
+      fi'' <- peek fi'
+      let domain_attr = c'fi_info'domain_attr fi''
+      da <- peek domain_attr
+      let ctxcnt =
+            minimum
+              [ fromIntegral $ ctx_cnt
+              , c'fi_domain_attr'tx_ctx_cnt da
+              , c'fi_domain_attr'rx_ctx_cnt da
+              ]
+      if ctxcnt <= 0
         then do
-            fi' <- peek fi
-            fi'' <- peek fi'
-            let domain_attr = c'fi_info'domain_attr fi''
-            da <- peek domain_attr
-            let ctxcnt = minimum [fromIntegral $ ctx_cnt, c'fi_domain_attr'tx_ctx_cnt da, c'fi_domain_attr'rx_ctx_cnt da]
-            if ctxcnt <= 0
-                then do
-                    print "Provider doesn't support contexts"
-                    return 1
-                else do
-                    --fi->ep_attr->tx_ctx_cnt = ctx_cnt;
-                    --fi->ep_attr->rx_ctx_cnt = ctx_cnt;
-                    --
-                    let ep_attr_ptr = c'fi_info'ep_attr fi''
-                    ep_attr <- peek ep_attr_ptr
-                    poke ep_attr_ptr $ ep_attr {c'fi_ep_attr'tx_ctx_cnt = ctxcnt, c'fi_ep_attr'rx_ctx_cnt = ctxcnt}
-                    ft_open_fabric_res |-> (c'fi_scalable_ep domain fi sep nullPtr) |-> (poke sep >>= alloc_ep_res) |-> bind_ep_res        
-        else
-            return ret
+          print "Provider doesn't support contexts"
+          return 1
+        else do
+          let ep_attr_ptr = c'fi_info'ep_attr fi''
+          ep_attr <- peek ep_attr_ptr
+          poke ep_attr_ptr $
+            ep_attr
+              { c'fi_ep_attr'tx_ctx_cnt = ctxcnt
+              , c'fi_ep_attr'rx_ctx_cnt = ctxcnt
+              }
+          ft_open_fabric_res |-> (c'fi_scalable_ep domain fi sep nullPtr) |->
+            (poke sep >>= alloc_ep_res) |->
+            (bind_ep_res env)
+    else return ret
 
 {- init_fabric
 static int init_fabric(void)
@@ -438,25 +480,26 @@ static int init_fabric(void)
 	return ret;
 }
 -}
-
-init_av (env@Env {..}) = do
+init_av (env@Env {..})
     -- based on opts do init_av_a or init_av_b
-    (mapM_ (\x -> c'fi_rx_addr remote_fi_addr x rx_ctx_bits) [0 .. (ctx_cnt - 1)] >> c'fi_recv rx_ep[0] rx_buf rx_size mr_desc 0 nullPtr) |->
-        (wait_for_comp env txcq_array)
+ = do
+  (mapM_ (\x -> c'fi_rx_addr remote_fi_addr x rx_ctx_bits) [0 .. (ctx_cnt - 1)] >>
+   c'fi_recv rx_ep rx_buf rx_size mr_desc 0 nullPtr) |->
+    (wait_for_comp env txcq_array)
 
 init_av_a (env@Env {..}) = do
-    alloca $ \addrlen ->
-        poke 256
-            (ft_av_insert av c'fi_info'dest_addr 1 remote_fi_addr 0 nullPtr) |->
-            (c'fi_getname p'fid_ep'fid tx_buf addrlen) |->
-            (peek addrlen >>= \al -> c'fi_send tx_ep[0] tx_buf al mr_desc remote_fi_addr nullPtr) |->
-            (wait_for_comp env rxcq_array[0])
+  alloca $ \addrlen -> do
+    poke 256 addrlen
+    (ft_av_insert av c'fi_info'dest_addr 1 remote_fi_addr 0 nullPtr) |->
+      (c'fi_getname p'fid_ep'fid tx_buf addrlen) |->
+      (peek addrlen >>= \al ->
+         c'fi_send tx_ep tx_buf al mr_desc remote_fi_addr nullPtr) |->
+      (wait_for_comp env rxcq_array)
 
 init_av_b (env@Env {..}) = do
-    (wait_for_comp env rxcq_array[0]) |->
-        (ft_av_insert av rx_buf 1 remote_fi_addr 0 nullPtr) |->
-        (c'fi_send tx_ep[0] tx_buf 1 mr_desc remote_fi_addr nullPtr)
-    
+  (wait_for_comp env rxcq_array) |->
+    (ft_av_insert av rx_buf 1 remote_fi_addr 0 nullPtr) |->
+    (c'fi_send tx_ep tx_buf 1 mr_desc remote_fi_addr nullPtr)
 
 {- init_av
 static int init_av(void)
@@ -516,7 +559,6 @@ static int init_av(void)
 	return ret;
 }
 -}
-
 run :: Env -> IO CInt
 run env = init_fabric env |-> init_av env |-> run_test env
 
@@ -541,40 +583,52 @@ static int run(void)
 	return ret;
 }
 -}
-
 scalable :: IO ()
 scalable = do
-    alloca $ \e'sep -> allocaArray 2 $ \e'tx_ep -> allocaArray 2 $ \e'rx_ep -> allocaArray 2 $ \e'txcq_array ->
-        allocaArray 2 $ \e'rxcq_array -> alloca $ \e'remote_rx_addr -> alloca $ \e'cq_attr -> alloca $ \e'av_attr -> alloca $ \e'av ->
-            alloca $ \e'hints -> alloca $ \e'fi -> alloca $ \e'domain ->
-                alloca $ \e'buf -> alloca $ \e'tx_buf -> alloca $ \e'rx_buf -> alloca $ \e'mr_desc ->
-                    alloca $ \e'rx_size -> alloca $ \e'tx_size -> do
-                        h <- c'fi_allocinfo
-                        poke e'hints h
-                        let env = Env 2
-                                    0
-                                    e'sep
-                                    e'tx_ep
-                                    e'rx_ep
-                                    e'txcq_array
-                                    e'rxcq_array
-                                    e'remote_rx_addr
-                                    e'cq_attr
-                                    e'av_attr
-                                    e'av
-                                    e'hints
-                                    e'fi
-                                    e'domain
-                                    e'buf
-                                    e'tx_buf
-                                    e'rx_buf
-                                    e'mr_desc
-                                    0
-                                    e'rx_size
-                                    e'tx_size
-                        run env
-
-    
+  alloca $ \e'sep ->
+    allocaArray 2 $ \e'tx_ep ->
+      allocaArray 2 $ \e'rx_ep ->
+        allocaArray 2 $ \e'txcq_array ->
+          allocaArray 2 $ \e'rxcq_array ->
+            alloca $ \e'remote_rx_addr ->
+              alloca $ \e'cq_attr ->
+                alloca $ \e'av_attr ->
+                  alloca $ \e'av ->
+                    alloca $ \e'hints ->
+                      alloca $ \e'fi ->
+                        alloca $ \e'domain ->
+                          alloca $ \e'buf ->
+                            alloca $ \e'tx_buf ->
+                              alloca $ \e'rx_buf ->
+                                alloca $ \e'mr_desc ->
+                                  alloca $ \e'rx_size ->
+                                    alloca $ \e'tx_size -> do
+                                      h <- c'fi_allocinfo
+                                      poke e'hints h
+                                      let env =
+                                            Env
+                                              2
+                                              0
+                                              e'sep
+                                              e'tx_ep
+                                              e'rx_ep
+                                              e'txcq_array
+                                              e'rxcq_array
+                                              e'remote_rx_addr
+                                              e'cq_attr
+                                              e'av_attr
+                                              e'av
+                                              e'hints
+                                              e'fi
+                                              e'domain
+                                              e'buf
+                                              e'tx_buf
+                                              e'rx_buf
+                                              e'mr_desc
+                                              0
+                                              e'rx_size
+                                              e'tx_size
+                                      run env >> return 0
 
 {- main
 int main(int argc, char **argv)
@@ -617,15 +671,64 @@ int main(int argc, char **argv)
 	return ft_exit_code(ret);
 }
 -}
-
 -- Utils
-
 retNonZero :: (Num a, Eq a) => IO a -> IO a -> IO a
 retNonZero a b = do
-    a' <- a
-    if a' == 0 
-        then b
-    else
-        return a'
+  a' <- a
+  if a' == 0
+    then b
+    else return a'
 
 (|->) = retNonZero
+
+-- shared.h
+ft_getinfo = return 0
+
+ft_av_insert = return 0
+
+{-
+int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr,
+		uint64_t flags, void *context)
+{
+	int ret;
+
+	ret = fi_av_insert(av, addr, count, fi_addr, flags, context);
+	if (ret < 0) {
+		FT_PRINTERR("fi_av_insert", ret);
+		return ret;
+	} else if (ret != count) {
+		FT_ERR("fi_av_insert: number of addresses inserted = %d;"
+			       " number of addresses given = %zd\n", ret, count);
+		return -EXIT_FAILURE;
+	}
+
+	return 0;
+}
+-}
+ft_open_fabric_res = return 0--ft_open_fabric_res = (fi_fabric (c'fi_info'fabric_attr fi) fab nullPtr) |-> fi_eq_open |-> fi_domain
+{-
+int ft_open_fabric_res(void)
+{
+	int ret;
+
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_fabric", ret);
+		return ret;
+	}
+
+	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_eq_open", ret);
+		return ret;
+	}
+
+	ret = fi_domain(fabric, fi, &domain, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_domain", ret);
+		return ret;
+	}
+
+	return 0;
+}
+-}
