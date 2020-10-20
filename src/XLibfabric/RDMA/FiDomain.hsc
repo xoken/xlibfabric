@@ -2,7 +2,7 @@
 #include <bindings.dsl.h>
 #include <rdma/fi_domain.h>
 module XLibfabric.RDMA.FiDomain where
-import XLibfabric.RDMA.FiEq hiding (C'fi_cntr_attr, C'fi_cq_attr)
+import XLibfabric.RDMA.FiEq hiding (C'fi_cntr_attr)
 import XLibfabric.RDMA.Fabric hiding (C'fid_cntr, C'fid_cq, C'fid_eq, C'fi_eq_attr, C'fid_poll, C'fid_wait, C'fi_wait_attr, C'fid_av, C'fid_domain, C'fid_mr)
 import Foreign.Ptr
 import Common
@@ -278,8 +278,6 @@ import Common
 #num FI_GATHER
 {- struct fi_atomic_attr; -}
 #opaque_t struct fi_atomic_attr
-{- struct fi_cq_attr; -}
-#opaque_t struct fi_cq_attr
 {- struct fi_cntr_attr; -}
 #opaque_t struct fi_cntr_attr
 {- struct fi_collective_attr; -}
