@@ -4,8 +4,8 @@
 module XLibfabric.RDMA.FiEndpoint where
 import Foreign.Ptr
 import Common
-import XLibfabric.RDMA.Fabric hiding (C'fid_ep, C'fid_stx, C'fid_pep)
-import XLibfabric.RDMA.FiDomain hiding (C'fid_domain)
+import XLibfabric.RDMA.Fabric hiding (C'fid_ep, C'fid_stx, C'fid_pep, C'fid_domain)
+import XLibfabric.RDMA.FiDomain
 #strict_import
 
 {- struct fi_msg {
