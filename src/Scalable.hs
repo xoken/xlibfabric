@@ -375,7 +375,8 @@ run_test (env@Env {..}) = do
     let ret = 0
         tb = castPtr tx_buf
         rb = castPtr rx_buf
-    if True -- (opts.dst_addr)
+    da <- peek opts
+    if c'ft_opts'dst_addr da /= nullPtr -- (opts.dst_addr)
         then do
             run_test_send tb env 0 0
         else do
@@ -498,9 +499,11 @@ static int init_fabric(void)
     return ret;
 }
 -}
-init_av (env@Env {..})
-    -- based on opts do init_av_a or init_av_b
- = do
+init_av (env@Env {..}) = do
+    da <- peek opts
+    if c'ft_opts'dst_addr da /= nullPtr
+        then init_av_a env
+        else init_av_b env
     r <- peek rx_ep
     tcq <- peek txcq_array
     rfa <- peek remote_fi_addr
@@ -759,7 +762,7 @@ ft_getinfo env@(Env {..}) = do
             let ty = c'fi_ep_attr'type ea
             h' <- peek h_
             o <- peek opts
-            if (c'ft_opts'options o) .&. 131072 == 0
+            if ((c'ft_opts'options o) .&. ft_opt_enable_hmem) == 0
                 then do
                     da <- peek $ c'fi_info'domain_attr h'
                     let caps = c'fi_info'caps h'
@@ -773,7 +776,7 @@ ft_getinfo env@(Env {..}) = do
             f_ <- peek flags
             n <- peek node
             s <- peek service
-            c'fi_getinfo 65545 n s f_ h_ fi
+            c'fi_getinfo ft_fiversion n s f_ h_ fi
             return 0
 
 {-
@@ -858,7 +861,12 @@ int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
 	return 0;
 }
 -}
-fi_source = 0
+fi_source :: CULong
+fi_source = 1 `shiftL` 57
+
+ft_fiversion = (1 `shiftL` 16) .|. 9
+
+ft_opt_enable_hmem = 1 `shiftL` 17
 
 getaddr env@(Env {..}) = do
     alloca $ \fi_ -> do
@@ -876,7 +884,7 @@ getaddr env@(Env {..}) = do
                         poke h $ h_ {c'fi_info'dest_addr = nullPtr, c'fi_info'dest_addrlen = 0}
                 return 0
             else do
-                ret <- c'fi_getinfo 65548 n s fl_ h fi_
+                ret <- c'fi_getinfo ft_fiversion n s fl_ h fi_
                 if ret /= 0
                     then do
                         print $ "fi_getinfo: " ++ show ret
@@ -991,7 +999,8 @@ ft_open_fabric_res Env {..} = do
     fi'' <- peek fi'
     fab' <- peek fab
     (c'fi_fabric (c'fi_info'fabric_attr fi'') fab nullPtr) |-> (c'fi_eq_open fab' eq_attr eq nullPtr) |->
-        (c'fi_domain fab' fi' domain nullPtr){-
+        (c'fi_domain fab' fi' domain nullPtr)
+        {-
 int ft_open_fabric_res(void)
 {
     int ret;
