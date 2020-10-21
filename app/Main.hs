@@ -27,3 +27,4 @@ main = do
             --withCString "xlibfabric" $ \ptrx -> withCString addr $ \ptra -> msg 1 [ptrx,ptra]-}
     print a
     print b
+    scalable
