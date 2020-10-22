@@ -41,6 +41,8 @@ data Env =
         , sep :: Ptr (Ptr C'fid_ep)
         , tx_ep :: Ptr (Ptr C'fid_ep)
         , rx_ep :: Ptr (Ptr C'fid_ep)
+        , rxcq :: (Ptr C'fid_cq)
+        , txcq :: (Ptr C'fid_cq)
         , txcq_array :: Ptr (Ptr C'fid_cq)
         , rxcq_array :: Ptr (Ptr C'fid_cq)
         , remote_rx_addr :: (Ptr C'fi_addr_t)
@@ -132,18 +134,24 @@ defEnv = do
 datum = 0x12345670
 
 closev_fid_ep :: Ptr C'fid_ep -> Int -> IO ()
-closev_fid_ep p n = mapM_ (\i -> close_fid (p'fid_ep'fid $ advancePtr p i)) [0 .. (n - 1)]
+closev_fid_ep p n = do
+    print $ "closev_fid_ep called"
+    mapM_ (\i -> close_fid (p'fid_ep'fid $ advancePtr p i)) [0 .. (n - 1)]
 
 close_fid :: Ptr C'fid -> IO ()
 close_fid fid = do
+    print $ "close_fid called"
     ret <- c'fi_close $ fid
     print ret
 
 closev_fid_cq :: Ptr C'fid_cq -> Int -> IO ()
-closev_fid_cq p n = mapM_ (\i -> close_fid (p'fid_cq'fid $ advancePtr p i)) [0 .. (n - 1)]
+closev_fid_cq p n = do
+    print $ "closev_fid_cq called"
+    mapM_ (\i -> close_fid (p'fid_cq'fid $ advancePtr p i)) [0 .. (n - 1)]
 
 free_res :: Env -> IO ()
 free_res Env {..} = do
+    print $ "free_res called"
     peek rx_ep >>= \r -> closev_fid_ep r $ fromIntegral ctx_cnt
     peek tx_ep >>= \t -> closev_fid_ep t $ fromIntegral ctx_cnt
     peek rxcq_array >>= \r -> closev_fid_cq r $ fromIntegral ctx_cnt
@@ -178,6 +186,7 @@ ft_alloc_ep_res a = return 0
 
 --alloc_ep_res :: Env -> IO CInt
 alloc_ep_res (env@Env {..}) = do
+    print $ "alloc_ep_res called"
     poke (p'fi_av_attr'rx_ctx_bits av_attr) $ ctxShiftR (ctx_cnt, rx_ctx_bits)
     ret <- ft_alloc_ep_res fi
     if ret == 0
@@ -261,6 +270,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 }
 -}
 bind_ep_res (env@(Env {..})) = do
+    print $ "bind_ep_res called"
     s <- peek sep
     (c'fi_scalable_ep_bind s (p'fid_av'fid av) 0) |->
         (mapM_
@@ -339,6 +349,7 @@ static int bind_ep_res(void)
 }
 -}
 wait_for_comp (env@Env {..}) cq = do
+    print $ "wait_fro_comp called"
     alloca $ \comp -> do
         ret <- doWhile (fmap (\x -> (x, -11)) (c'fi_cq_read cq comp 1)) (\(x, ret) -> x < 0 && ret == -11)
         if ret /= 1
@@ -372,6 +383,7 @@ static int wait_for_comp(struct fid_cq *cq)
 }
 -}
 run_test (env@Env {..}) = do
+    print $ "run_test called"
     let ret = 0
         tb = castPtr tx_buf
         rb = castPtr rx_buf
@@ -440,9 +452,11 @@ static int run_test()
 -}
 --init_fabric :: Env -> IO CInt
 init_fabric (env@Env {..}) = do
+    print $ "init_fabric called"
     ret <- ft_getinfo env
     if ret == 0
         then do
+            print $ "ft_getinfo return 0"
             fi' <- peek fi
             fi'' <- peek fi'
             let domain_attr = c'fi_info'domain_attr fi''
@@ -500,6 +514,7 @@ static int init_fabric(void)
 }
 -}
 init_av (env@Env {..}) = do
+    print $ "init_av called"
     da <- peek opts
     if c'ft_opts'dst_addr da /= nullPtr
         then init_av_a env
@@ -590,7 +605,9 @@ static int init_av(void)
 }
 -}
 run :: Env -> IO CLong
-run env = (init_fabric env) |-> (init_av env) |-> (run_test env)
+run env = do
+    print $ "run called"
+    (init_fabric env) |-> (init_av env) |-> (run_test env)
 
 {- run
 static int run(void)
@@ -615,9 +632,10 @@ static int run(void)
 -}
 scalable :: IO ()
 scalable = do
+    print $ "scalable called"
     alloca $ \e'sep ->
         allocaArray 2 $ \e'tx_ep ->
-            allocaArray 2 $ \e'rx_ep ->
+            allocaArray 2 $ \e'rx_ep -> alloca $ \e'rxcq -> alloca $ \e'txcq
                 allocaArray 2 $ \e'txcq_array ->
                     allocaArray 2 $ \e'rxcq_array ->
                         alloca $ \e'remote_rx_addr ->
@@ -662,6 +680,8 @@ scalable = do
                                                                                                                         e'sep
                                                                                                                         e'tx_ep
                                                                                                                         e'rx_ep
+                                                                                                                        e'txcq
+                                                                                                                        e'rxcq
                                                                                                                         e'txcq_array
                                                                                                                         e'rxcq_array
                                                                                                                         e'remote_rx_addr
@@ -733,6 +753,7 @@ int main(int argc, char **argv)
 -- Utils
 (|->) :: (Integral a, Num b) => IO a -> IO b -> IO b
 a |-> b = do
+    print $ "|-> called"
     a' <- a
     case a' of
         0 -> return $ fromIntegral a'
@@ -1024,5 +1045,153 @@ int ft_open_fabric_res(void)
     }
 
     return 0;
+}
+-}
+
+ft_alloc_ep_res env@(Env {..}) = do
+    ft_alloc_msgs |-> (do
+        fi_ <- peek fi
+        fmt_ <- p'fi_cq_attr'format cq_attr
+        fmt_v <- peek fmt_
+        txattr <- c'fi_info'tx_attr fi
+        rxattr <- c'fi_info'rx_attr fi
+        if fmt_v == 0
+            then do
+                if c'fi_info_caps fi_ .&. (1 `shiftL` 3) /= 0
+                    then poke fmt_ 4
+                    else poke fmt_ 1
+            else do
+                return ()
+        return 0
+        ft_cq_set_wait_attr
+        s_ <- p'fi_cq_attr'size
+        tasp <- p'fi_tx_attr'size txattr
+        rasp <- p'fi_rx_attr'size rxattr
+        tasv <- peek tasp
+        rasv <- peek rasp
+        if c'ft_opts'tx_cq_size opts /= 0
+            then poke s_ (c'ft_opts'tx_cq_size opts)
+            else poke s_ tasv
+        if (c'ft_opts'options opts) .&. (1 `shiftL 10`) /= 0
+            then do
+                s' <- peek s_
+                if c'ft_opts'rx_cq_size opts /= 0
+                    then poke s_ (s' + c'ft_opts'rx_cq_size opts)
+                    else poke s_ $ s' + rasv
+            else return 0
+        ret <- c'fi_cq_open domain cq_attr txcq txcq
+        if ret /= 0
+            then do
+                print $ "fi_cq_open: " ++ show ret
+                return ret
+            else return 0
+        if (c'ft_opts'options opts) .&. (1 `shiftL 10`) /= 0
+            then do
+                txcq_ <- peek txcq
+                poke rxcq txcq_
+                return 0
+            else return 0
+        )
+
+                        
+            
+
+{-
+int ft_alloc_ep_res(struct fi_info *fi)
+{
+	int ret;
+
+	ret = ft_alloc_msgs();
+	if (ret)
+		return ret;
+
+	if (cq_attr.format == FI_CQ_FORMAT_UNSPEC) {
+		if (fi->caps & FI_TAGGED)
+			cq_attr.format = FI_CQ_FORMAT_TAGGED;
+		else
+			cq_attr.format = FI_CQ_FORMAT_CONTEXT;
+	}
+
+	if (opts.options & FT_OPT_CQ_SHARED) {
+		ft_cq_set_wait_attr();
+		cq_attr.size = 0;
+
+		if (opts.tx_cq_size)
+			cq_attr.size += opts.tx_cq_size;
+		else
+			cq_attr.size += fi->tx_attr->size;
+
+		if (opts.rx_cq_size)
+			cq_attr.size += opts.rx_cq_size;
+		else
+			cq_attr.size += fi->rx_attr->size;
+
+		ret = fi_cq_open(domain, &cq_attr, &txcq, &txcq);
+		if (ret) {
+			FT_PRINTERR("fi_cq_open", ret);
+			return ret;
+		}
+		rxcq = txcq;
+	}
+
+	if (!(opts.options & FT_OPT_CQ_SHARED)) {
+		ft_cq_set_wait_attr();
+		if (opts.tx_cq_size)
+			cq_attr.size = opts.tx_cq_size;
+		else
+			cq_attr.size = fi->tx_attr->size;
+
+		ret = fi_cq_open(domain, &cq_attr, &txcq, &txcq);
+		if (ret) {
+			FT_PRINTERR("fi_cq_open", ret);
+			return ret;
+		}
+	}
+
+	if (opts.options & FT_OPT_TX_CNTR) {
+		ret = ft_cntr_open(&txcntr);
+		if (ret) {
+			FT_PRINTERR("fi_cntr_open", ret);
+			return ret;
+		}
+	}
+
+	if (!(opts.options & FT_OPT_CQ_SHARED)) {
+		ft_cq_set_wait_attr();
+		if (opts.rx_cq_size)
+			cq_attr.size = opts.rx_cq_size;
+		else
+			cq_attr.size = fi->rx_attr->size;
+
+		ret = fi_cq_open(domain, &cq_attr, &rxcq, &rxcq);
+		if (ret) {
+			FT_PRINTERR("fi_cq_open", ret);
+			return ret;
+		}
+	}
+
+	if (opts.options & FT_OPT_RX_CNTR) {
+		ret = ft_cntr_open(&rxcntr);
+		if (ret) {
+			FT_PRINTERR("fi_cntr_open", ret);
+			return ret;
+		}
+	}
+
+	if (fi->ep_attr->type == FI_EP_RDM || fi->ep_attr->type == FI_EP_DGRAM) {
+		if (fi->domain_attr->av_type != FI_AV_UNSPEC)
+			av_attr.type = fi->domain_attr->av_type;
+
+		if (opts.av_name) {
+			av_attr.name = opts.av_name;
+		}
+		av_attr.count = opts.av_size;
+		ret = fi_av_open(domain, &av_attr, &av, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_av_open", ret);
+			return ret;
+		}
+	}
+	return 0;
 }
 -}
