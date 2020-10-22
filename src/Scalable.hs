@@ -18,9 +18,18 @@ import Foreign.Ptr
 import Foreign.Storable
 import GHC.Generics (Generic(..))
 import System.Environment
-import XLibfabric.RDMA.Fabric hiding (C'fid_av, C'fid_cq, C'fid_domain, C'fid_ep, C'fid_eq, C'fid_pep)
+import XLibfabric.RDMA.Fabric hiding
+    ( C'fid_av
+    , C'fid_cntr
+    , C'fid_cq
+    , C'fid_domain
+    , C'fid_ep
+    , C'fid_eq
+    , C'fid_pep
+    , C'fid_wait
+    )
 import XLibfabric.RDMA.FiCm
-import XLibfabric.RDMA.FiDomain as FD hiding (C'fi_cq_attr)
+import XLibfabric.RDMA.FiDomain as FD hiding (C', C'fi_cntr_attr)
 import XLibfabric.RDMA.FiEndpoint
 import XLibfabric.RDMA.FiEq as Eq
 
@@ -41,8 +50,8 @@ data Env =
         , sep :: Ptr (Ptr C'fid_ep)
         , tx_ep :: Ptr (Ptr C'fid_ep)
         , rx_ep :: Ptr (Ptr C'fid_ep)
-        , rxcq :: (Ptr C'fid_cq)
-        , txcq :: (Ptr C'fid_cq)
+        , rxcq :: Ptr (Ptr C'fid_cq)
+        , txcq :: Ptr (Ptr C'fid_cq)
         , txcq_array :: Ptr (Ptr C'fid_cq)
         , rxcq_array :: Ptr (Ptr C'fid_cq)
         , remote_rx_addr :: (Ptr C'fi_addr_t)
@@ -66,6 +75,10 @@ data Env =
         , node :: Ptr (CString)
         , service :: Ptr (CString)
         , flags :: Ptr CULong
+        , cntr_attr :: Ptr C'fi_cntr_attr
+        , rxcntr :: Ptr (Ptr C'fid_cntr)
+        , txcntr :: Ptr (Ptr C'fid_cntr)
+        , waitset :: Ptr C'fid_wait
         }
 
 -- C'ft_opts
@@ -106,6 +119,36 @@ instance Storable C'ft_opts where
     poke = cPoke
     alignment = cAlignment
     sizeOf = cSizeOf
+
+init_opts =
+    C'ft_opts
+        1000
+        10
+        1024
+        64
+        1
+        0
+        0
+        0
+        nullPtr
+        nullPtr
+        nullPtr
+        nullPtr
+        nullPtr
+        1
+        ((1 `shiftL` 3) .|. (1 `shiftL` 4))
+        0
+        0
+        2
+        nullPtr
+        0
+        2
+        0
+        ((1 `shiftL` 2) .|. (1 `shiftL` 4) .|. (1 `shiftL` 5) .|. (1 `shiftL` 6))
+        0
+        0
+        0
+        nullPtr
 
 {-
 defEnv = do
@@ -182,13 +225,11 @@ static void free_res(void)
     }
 }
 -}
-ft_alloc_ep_res a = return 0
-
 --alloc_ep_res :: Env -> IO CInt
 alloc_ep_res (env@Env {..}) = do
     print $ "alloc_ep_res called"
     poke (p'fi_av_attr'rx_ctx_bits av_attr) $ ctxShiftR (ctx_cnt, rx_ctx_bits)
-    ret <- ft_alloc_ep_res fi
+    ret <- ft_alloc_ep_res env
     if ret == 0
             --txcq_array = calloc(ctx_cnt, sizeof *txcq_array);
             --rxcq_array = calloc(ctx_cnt, sizeof *rxcq_array);
@@ -472,7 +513,8 @@ init_fabric (env@Env {..}) = do
                     ep_attr <- peek ep_attr_ptr
                     poke ep_attr_ptr $ ep_attr {c'fi_ep_attr'tx_ctx_cnt = ctxcnt, c'fi_ep_attr'rx_ctx_cnt = ctxcnt}
                     d <- peek domain
-                    ft_open_fabric_res env |-> (c'fi_scalable_ep d fi' sep nullPtr) |-> (alloc_ep_res env) |->
+                    ft_open_fabric_res env |-> (print "c'fi_scalable_ep called" >> c'fi_scalable_ep d fi' sep nullPtr) |->
+                        (alloc_ep_res env) |->
                         (bind_ep_res env)
         else return ret
 
@@ -635,79 +677,95 @@ scalable = do
     print $ "scalable called"
     alloca $ \e'sep ->
         allocaArray 2 $ \e'tx_ep ->
-            allocaArray 2 $ \e'rx_ep -> alloca $ \e'rxcq -> alloca $ \e'txcq
-                allocaArray 2 $ \e'txcq_array ->
-                    allocaArray 2 $ \e'rxcq_array ->
-                        alloca $ \e'remote_rx_addr ->
-                            alloca $ \e'cq_attr ->
-                                alloca $ \e'av_attr ->
-                                    alloca $ \e'av ->
-                                        alloca $ \e'hints ->
-                                            alloca $ \e'fi ->
-                                                alloca $ \e'domain ->
-                                                    alloca $ \e'buf ->
-                                                        alloca $ \e'tx_buf ->
-                                                            alloca $ \e'rx_buf ->
-                                                                alloca $ \e'mr_desc ->
-                                                                    alloca $ \e'remote_fi_addr ->
-                                                                        alloca $ \e'fab ->
-                                                                            alloca $ \e'eq_attr ->
-                                                                                alloca $ \e'eq ->
-                                                                                    alloca $ \e'opts ->
-                                                                                        alloca $ \e'node ->
-                                                                                            alloca $ \e'service ->
-                                                                                                alloca $ \e'flags -> do
-                                                                                                    poke
-                                                                                                        e'eq_attr
-                                                                                                        (Eq.C'fi_eq_attr
-                                                                                                             0
-                                                                                                             0
-                                                                                                             1
-                                                                                                             0
-                                                                                                             nullPtr)
-                                                                                                    h <- c'fi_allocinfo
-                                                                                                    if h == nullPtr
-                                                                                                        then print
-                                                                                                                 "EXIT FAILURE"
-                                                                                                        else do
-                                                                                                            poke
-                                                                                                                e'hints
-                                                                                                                h
-                                                                                                            let env =
-                                                                                                                    Env
-                                                                                                                        2
-                                                                                                                        0
-                                                                                                                        e'sep
-                                                                                                                        e'tx_ep
-                                                                                                                        e'rx_ep
-                                                                                                                        e'txcq
-                                                                                                                        e'rxcq
-                                                                                                                        e'txcq_array
-                                                                                                                        e'rxcq_array
-                                                                                                                        e'remote_rx_addr
-                                                                                                                        e'cq_attr
-                                                                                                                        e'av_attr
-                                                                                                                        e'av
-                                                                                                                        e'hints
-                                                                                                                        e'fi
-                                                                                                                        e'domain
-                                                                                                                        e'buf
-                                                                                                                        e'tx_buf
-                                                                                                                        e'rx_buf
-                                                                                                                        e'mr_desc
-                                                                                                                        e'remote_fi_addr
-                                                                                                                        256
-                                                                                                                        256
-                                                                                                                        e'fab
-                                                                                                                        e'eq_attr
-                                                                                                                        e'eq
-                                                                                                                        e'opts
-                                                                                                                        e'node
-                                                                                                                        e'service
-                                                                                                                        e'flags
-                                                                                                            run env >>
-                                                                                                                return
-                                                                                                                    ()
+            allocaArray 2 $ \e'rx_ep ->
+                alloca $ \e'rxcq ->
+                    alloca $ \e'txcq ->
+                        allocaArray 2 $ \e'txcq_array ->
+                            allocaArray 2 $ \e'rxcq_array ->
+                                alloca $ \e'remote_rx_addr ->
+                                    alloca $ \e'cq_attr ->
+                                        alloca $ \e'av_attr ->
+                                            alloca $ \e'av ->
+                                                alloca $ \e'hints ->
+                                                    alloca $ \e'fi ->
+                                                        alloca $ \e'domain ->
+                                                            alloca $ \e'buf ->
+                                                                alloca $ \e'tx_buf ->
+                                                                    alloca $ \e'rx_buf ->
+                                                                        alloca $ \e'mr_desc ->
+                                                                            alloca $ \e'remote_fi_addr ->
+                                                                                alloca $ \e'fab ->
+                                                                                    alloca $ \e'eq_attr ->
+                                                                                        alloca $ \e'eq ->
+                                                                                            alloca $ \e'opts ->
+                                                                                                alloca $ \e'node ->
+                                                                                                    alloca $ \e'service ->
+                                                                                                        alloca $ \e'flags ->
+                                                                                                            alloca $ \e'cntr_attr ->
+                                                                                                                alloca $ \e'rxcntr ->
+                                                                                                                    alloca $ \e'txcntr ->
+                                                                                                                        alloca $ \e'waitset -> do
+                                                                                                                            poke
+                                                                                                                                e'eq_attr
+                                                                                                                                (Eq.C'fi_eq_attr
+                                                                                                                                     0
+                                                                                                                                     0
+                                                                                                                                     1
+                                                                                                                                     0
+                                                                                                                                     nullPtr)
+                                                                                                                            h <-
+                                                                                                                                c'fi_allocinfo
+                                                                                                                            if h ==
+                                                                                                                               nullPtr
+                                                                                                                                then print
+                                                                                                                                         "EXIT FAILURE"
+                                                                                                                                else do
+                                                                                                                                    poke
+                                                                                                                                        e'hints
+                                                                                                                                        h
+                                                                                                                                    poke
+                                                                                                                                        e'opts
+                                                                                                                                        init_opts
+                                                                                                                                    let env =
+                                                                                                                                            Env
+                                                                                                                                                2
+                                                                                                                                                0
+                                                                                                                                                e'sep
+                                                                                                                                                e'tx_ep
+                                                                                                                                                e'rx_ep
+                                                                                                                                                e'txcq
+                                                                                                                                                e'rxcq
+                                                                                                                                                e'txcq_array
+                                                                                                                                                e'rxcq_array
+                                                                                                                                                e'remote_rx_addr
+                                                                                                                                                e'cq_attr
+                                                                                                                                                e'av_attr
+                                                                                                                                                e'av
+                                                                                                                                                e'hints
+                                                                                                                                                e'fi
+                                                                                                                                                e'domain
+                                                                                                                                                e'buf
+                                                                                                                                                e'tx_buf
+                                                                                                                                                e'rx_buf
+                                                                                                                                                e'mr_desc
+                                                                                                                                                e'remote_fi_addr
+                                                                                                                                                256
+                                                                                                                                                256
+                                                                                                                                                e'fab
+                                                                                                                                                e'eq_attr
+                                                                                                                                                e'eq
+                                                                                                                                                e'opts
+                                                                                                                                                e'node
+                                                                                                                                                e'service
+                                                                                                                                                e'flags
+                                                                                                                                                e'cntr_attr
+                                                                                                                                                e'txcntr
+                                                                                                                                                e'rxcntr
+                                                                                                                                                e'waitset
+                                                                                                                                    run
+                                                                                                                                        env >>
+                                                                                                                                        return
+                                                                                                                                            ()
 
 {- main
 int main(int argc, char **argv)
@@ -1016,12 +1074,14 @@ int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr
 }
 -}
 ft_open_fabric_res Env {..} = do
+    print "ft_open_fabric_res called"
     fi' <- peek fi
     fi'' <- peek fi'
     fab' <- peek fab
     (c'fi_fabric (c'fi_info'fabric_attr fi'') fab nullPtr) |-> (c'fi_eq_open fab' eq_attr eq nullPtr) |->
         (c'fi_domain fab' fi' domain nullPtr)
-        {-
+
+{-
 int ft_open_fabric_res(void)
 {
     int ret;
@@ -1047,54 +1107,97 @@ int ft_open_fabric_res(void)
     return 0;
 }
 -}
-
 ft_alloc_ep_res env@(Env {..}) = do
-    ft_alloc_msgs |-> (do
-        fi_ <- peek fi
-        fmt_ <- p'fi_cq_attr'format cq_attr
-        fmt_v <- peek fmt_
-        txattr <- c'fi_info'tx_attr fi
-        rxattr <- c'fi_info'rx_attr fi
-        if fmt_v == 0
-            then do
-                if c'fi_info_caps fi_ .&. (1 `shiftL` 3) /= 0
-                    then poke fmt_ 4
-                    else poke fmt_ 1
-            else do
-                return ()
-        return 0
-        ft_cq_set_wait_attr
-        s_ <- p'fi_cq_attr'size
-        tasp <- p'fi_tx_attr'size txattr
-        rasp <- p'fi_rx_attr'size rxattr
-        tasv <- peek tasp
-        rasv <- peek rasp
-        if c'ft_opts'tx_cq_size opts /= 0
-            then poke s_ (c'ft_opts'tx_cq_size opts)
-            else poke s_ tasv
-        if (c'ft_opts'options opts) .&. (1 `shiftL 10`) /= 0
-            then do
-                s' <- peek s_
-                if c'ft_opts'rx_cq_size opts /= 0
-                    then poke s_ (s' + c'ft_opts'rx_cq_size opts)
-                    else poke s_ $ s' + rasv
-            else return 0
-        ret <- c'fi_cq_open domain cq_attr txcq txcq
-        if ret /= 0
-            then do
-                print $ "fi_cq_open: " ++ show ret
-                return ret
-            else return 0
-        if (c'ft_opts'options opts) .&. (1 `shiftL 10`) /= 0
-            then do
-                txcq_ <- peek txcq
-                poke rxcq txcq_
-                return 0
-            else return 0
-        )
-
-                        
-            
+    ft_alloc_msgs |->
+        (do o <- peek opts
+            d <- peek domain
+            fi_ <- peek fi
+            fi__ <- peek fi_
+            let fmt_ = p'fi_cq_attr'format cq_attr
+            fmt_v <- peek fmt_
+            txattr <- peek $ p'fi_info'tx_attr fi_
+            rxattr <- peek $ p'fi_info'rx_attr fi_
+            if fmt_v == 0
+                then do
+                    if c'fi_info'caps fi__ .&. (1 `shiftL` 3) /= 0
+                        then poke fmt_ 4
+                        else poke fmt_ 1
+                    return 0
+                else do
+                    return 0
+            ft_cq_set_wait_attr env
+            let s_ = p'fi_cq_attr'size cq_attr
+                tasp = p'fi_tx_attr'size txattr
+                rasp = p'fi_rx_attr'size rxattr
+            tasv <- peek tasp
+            rasv <- peek rasp
+            if c'ft_opts'tx_cq_size o /= 0
+                then poke s_ (fromIntegral $ c'ft_opts'tx_cq_size o)
+                else poke s_ tasv
+            if (c'ft_opts'options o) .&. (1 `shiftL` 10) /= 0
+                then do
+                    s' <- peek s_
+                    if c'ft_opts'rx_cq_size o /= 0
+                        then poke s_ (s' + (fromIntegral $ c'ft_opts'rx_cq_size o))
+                        else poke s_ $ s' + rasv
+                    return 0
+                else return 0
+            ret <- c'fi_cq_open d cq_attr txcq $ castPtr txcq
+            if ret /= 0
+                then do
+                    print $ "fi_cq_open: " ++ show ret
+                    return ret
+                else return 0
+            if (c'ft_opts'options o) .&. (1 `shiftL` 10) /= 0
+                then do
+                    txcq_ <- peek txcq
+                    poke rxcq txcq_
+                    return 0
+                else return 0
+            if (c'ft_opts'options o) .&. (1 `shiftL` 6) /= 0
+                then do
+                    ret' <- ft_cntr_open env txcntr
+                    if ret' /= 0
+                        then do
+                            print $ "fi_cntr_open: " ++ show ret'
+                            return ret'
+                        else return 0
+                else return 0
+            if (c'ft_opts'options o) .&. (1 `shiftL` 10) == 0
+                then do
+                    ft_cq_set_wait_attr env
+                    let tasp = p'fi_tx_attr'size txattr
+                        asp = p'fi_rx_attr'size rxattr
+                    tasv <- peek tasp
+                    asv <- peek rasp
+                    if c'ft_opts'tx_cq_size o /= 0
+                        then poke s_ (fromIntegral $ c'ft_opts'rx_cq_size o)
+                        else poke s_ asv
+                    ret <- c'fi_cq_open d cq_attr rxcq $ castPtr rxcq
+                    if ret /= 0
+                        then do
+                            print $ "fi_cq_open: " ++ show ret
+                            return ret
+                        else return 0
+                else return 0
+            if (c'ft_opts'options o) .&. (1 `shiftL` 5) /= 0
+                then do
+                    ret'' <- ft_cntr_open env rxcntr
+                    if ret'' /= 0
+                        then do
+                            print $ "fi_cntr_open: " ++ show ret''
+                            return ret''
+                        else return 0
+                else return 0
+            fi_ <- peek fi
+            ep_ <- peek $ p'fi_info'ep_attr fi_
+            let typ = p'fi_ep_attr'type $ ep_
+            ty <- peek typ
+            if ty `elem` [c'FI_EP_DGRAM, c'FI_EP_RDM]
+                then do
+                    return 0
+                else do
+                    return 0)
 
 {-
 int ft_alloc_ep_res(struct fi_info *fi)
@@ -1147,7 +1250,7 @@ int ft_alloc_ep_res(struct fi_info *fi)
 			return ret;
 		}
 	}
-
+=============================================
 	if (opts.options & FT_OPT_TX_CNTR) {
 		ret = ft_cntr_open(&txcntr);
 		if (ret) {
@@ -1192,6 +1295,193 @@ int ft_alloc_ep_res(struct fi_info *fi)
 			return ret;
 		}
 	}
+	return 0;
+}
+-}
+ft_cntr_open env@(Env {..}) cntr = do
+    ft_cntr_set_wait_attr env
+    d <- peek domain
+    c'fi_cntr_open d cntr_attr cntr $ castPtr cntr
+
+{-
+int ft_cntr_open(struct fid_cntr **cntr)
+{
+	ft_cntr_set_wait_attr();
+	return fi_cntr_open(domain, &cntr_attr, cntr, cntr);
+}
+-}
+ft_cq_set_wait_attr Env {..} = do
+    o <- peek opts
+    let obj = p'fi_cq_attr'wait_obj cq_attr
+        cond = p'fi_cq_attr'wait_cond cq_attr
+        set = p'fi_cq_attr'wait_set cq_attr
+    case c'ft_opts'comp_method o of
+        1 -> do
+            poke obj 1 -- FI_WAIT_UNSPEC
+            poke cond 1 -- FI_CQ_COND_NONE
+        2 -> do
+            poke obj 2 -- FI_WAIT_SET
+            poke cond 1 -- FI_CQ_COND_NONE
+            poke set waitset -- waitset
+        3 -> do
+            poke obj 3 -- FI_WAIT_FD
+            poke cond 1 -- FI_CQ_COND_NONE
+        4 -> do
+            poke obj 5 -- FI_WAIT_YIELD
+            poke cond 1 -- FI_CQ_COND_NONE
+        otherwise -> do
+            poke obj 0 -- FI_WAIT_NONE
+
+{-
+static void ft_cq_set_wait_attr(void)
+{
+	switch (opts.comp_method) {
+	case FT_COMP_SREAD:
+		cq_attr.wait_obj = FI_WAIT_UNSPEC;
+		cq_attr.wait_cond = FI_CQ_COND_NONE;
+		break;
+	case FT_COMP_WAITSET:
+		assert(waitset);
+		cq_attr.wait_obj = FI_WAIT_SET;
+		cq_attr.wait_cond = FI_CQ_COND_NONE;
+		cq_attr.wait_set = waitset;
+		break;
+	case FT_COMP_WAIT_FD:
+		cq_attr.wait_obj = FI_WAIT_FD;
+		cq_attr.wait_cond = FI_CQ_COND_NONE;
+		break;
+	case FT_COMP_YIELD:
+		cq_attr.wait_obj = FI_WAIT_YIELD;
+		cq_attr.wait_cond = FI_CQ_COND_NONE;
+		break;
+	default:
+		cq_attr.wait_obj = FI_WAIT_NONE;
+		break;
+	}
+}
+-}
+ft_cntr_set_wait_attr Env {..} = do
+    o <- peek opts
+    let obj = p'fi_cq_attr'wait_obj cq_attr
+    case c'ft_opts'comp_method o of
+        1 -> do
+            poke obj 1 -- FI_WAIT_UNSPEC
+        2 -> do
+            poke obj 2 -- FI_WAIT_SET
+        3 -> do
+            poke obj 3 -- FI_WAIT_FD
+        4 -> do
+            poke obj 5 -- FI_WAIT_YIELD
+        otherwise -> do
+            poke obj 0 -- FI_WAIT_NONE
+
+{-
+static void ft_cntr_set_wait_attr(void)
+{
+	switch (opts.comp_method) {
+	case FT_COMP_SREAD:
+		cntr_attr.wait_obj = FI_WAIT_UNSPEC;
+		break;
+	case FT_COMP_WAITSET:
+		assert(waitset);
+		cntr_attr.wait_obj = FI_WAIT_SET;
+		break;
+	case FT_COMP_WAIT_FD:
+		cntr_attr.wait_obj = FI_WAIT_FD;
+		break;
+	case FT_COMP_YIELD:
+		cntr_attr.wait_obj = FI_WAIT_YIELD;
+		break;
+	default:
+		cntr_attr.wait_obj = FI_WAIT_NONE;
+		break;
+	}
+}
+-}
+ft_alloc_msgs = return 0{-
+ft_alloc_msgs env@(Env {..}) = do
+    let alignment = 1
+    if ft_check_opts env (1 `shiftL` 12)
+        then return 0
+        else do
+            return 0
+
+
+static int ft_alloc_msgs(void)
+{
+	int ret;
+	long alignment = 1;
+
+	if (ft_check_opts(FT_OPT_SKIP_MSG_ALLOC))
+		return 0;
+
+	if (opts.options & FT_OPT_ALLOC_MULT_MR) {
+		ft_set_tx_rx_sizes(&tx_mr_size, &rx_mr_size);
+		rx_size = FT_MAX_CTRL_MSG + ft_rx_prefix_size();
+		tx_size = FT_MAX_CTRL_MSG + ft_tx_prefix_size();
+		buf_size = rx_size + tx_size;
+	} else {
+		ft_set_tx_rx_sizes(&tx_size, &rx_size);
+		tx_mr_size = 0;
+		rx_mr_size = 0;
+		buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) * opts.window_size +
+			   MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size;
+	}
+
+	if (opts.options & FT_OPT_ALIGN && !(opts.options & FT_OPT_USE_DEVICE)) {
+		alignment = sysconf(_SC_PAGESIZE);
+		if (alignment < 0)
+			return -errno;
+		buf_size += alignment;
+
+		ret = posix_memalign((void **) &buf, (size_t) alignment,
+				buf_size);
+		if (ret) {
+			FT_PRINTERR("posix_memalign", ret);
+			return ret;
+		}
+	} else {
+		ret = ft_hmem_alloc(opts.iface, opts.device, (void **) &buf, buf_size);
+		if (ret)
+			return ret;
+	}
+	ret = ft_hmem_memset(opts.iface, opts.device, (void *) buf, 0, buf_size);
+	if (ret)
+		return ret;
+	rx_buf = buf;
+
+	if (opts.options & FT_OPT_ALLOC_MULT_MR)
+		tx_buf = (char *) buf + MAX(rx_size, FT_MAX_CTRL_MSG);
+	else
+		tx_buf = (char *) buf + MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size;
+
+	remote_cq_data = ft_init_cq_data(fi);
+
+	mr = &no_mr;
+	if (!ft_mr_alloc_func && !ft_check_opts(FT_OPT_SKIP_REG_MR)) {
+		ret = ft_reg_mr(buf, buf_size, ft_info_to_mr_access(fi),
+				FT_MR_KEY, &mr, &mr_desc);
+		if (ret)
+			return ret;
+	} else {
+		if (ft_mr_alloc_func) {
+			assert(!ft_check_opts(FT_OPT_SKIP_REG_MR));
+			ret = ft_mr_alloc_func();
+			if (ret)
+				return ret;
+		}
+	}
+
+	ret = ft_alloc_ctx_array(&tx_ctx_arr, &tx_mr_bufs, tx_buf,
+				 tx_mr_size, FT_TX_MR_KEY);
+	if (ret)
+		return -FI_ENOMEM;
+
+	ret = ft_alloc_ctx_array(&rx_ctx_arr, &rx_mr_bufs, rx_buf,
+				 rx_mr_size, FT_RX_MR_KEY);
+	if (ret)
+		return -FI_ENOMEM;
+
 	return 0;
 }
 -}
