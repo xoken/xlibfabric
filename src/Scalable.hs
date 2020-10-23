@@ -66,8 +66,11 @@ data Env =
         , rx_buf :: Ptr ()
         , mr_desc :: Ptr ()
         , remote_fi_addr :: Ptr CULong
-        , rx_size :: CSize
-        , tx_size :: CSize
+        , rx_size :: Ptr CSize
+        , tx_size :: Ptr CSize
+        , rx_mr_size :: Ptr CSize
+        , tx_mr_size :: Ptr CSize
+        , buf_size :: Ptr CSize
         , fab :: Ptr (Ptr C'fid_fabric)
         , eq_attr :: (Ptr Eq.C'fi_eq_attr)
         , eq :: Ptr (Ptr C'fid_eq)
@@ -313,6 +316,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 bind_ep_res (env@(Env {..})) = do
     print $ "bind_ep_res called"
     s <- peek sep
+    rs <- peek rx_size
     (c'fi_scalable_ep_bind s (p'fid_av'fid av) 0) |->
         (mapM_
              (\i ->
@@ -328,7 +332,7 @@ bind_ep_res (env@(Env {..})) = do
                       peek rxcq_array >>= \rcq ->
                           (c'fi_ep_bind (advancePtr r i) (p'fid_cq'fid $ advancePtr rcq i) 1024) |->
                           (c'fi_enable (advancePtr r i)) |->
-                          (c'fi_recv (advancePtr r i) rx_buf (fromIntegral $ max rx_size 256) mr_desc 0 nullPtr))
+                          (c'fi_recv (advancePtr r i) rx_buf (fromIntegral $ max rs 256) mr_desc 0 nullPtr))
              [0 .. (fromIntegral $ ctx_cnt - 1)] >>
          return 0) |->
         (c'fi_enable s)
@@ -443,7 +447,8 @@ run_test_send tb (env@Env {..}) i _ = do
     t <- peek tx_ep
     tcq <- peek txcq_array
     rra <- peek $ advancePtr remote_rx_addr i
-    (c'fi_send (advancePtr t i) tx_buf tx_size mr_desc rra nullPtr) |->
+    ts <- peek tx_size
+    (c'fi_send (advancePtr t i) tx_buf ts mr_desc rra nullPtr) |->
         (wait_for_comp env (advancePtr tcq i) >>= \r -> run_test_send tb env (i + 1) r)
 
 run_test_recv _ _ 0 ret = return ret
@@ -564,7 +569,8 @@ init_av (env@Env {..}) = do
     r <- peek rx_ep
     tcq <- peek txcq_array
     rfa <- peek remote_fi_addr
-    (mapM_ (\x -> c'fi_rx_addr rfa x rx_ctx_bits) [0 .. (ctx_cnt - 1)] >> c'fi_recv r rx_buf rx_size mr_desc 0 nullPtr) |->
+    rs <- peek rx_size
+    (mapM_ (\x -> c'fi_rx_addr rfa x rx_ctx_bits) [0 .. (ctx_cnt - 1)] >> c'fi_recv r rx_buf rs mr_desc 0 nullPtr) |->
         (wait_for_comp env tcq)
 
 init_av_a (env@Env {..}) = do
@@ -694,6 +700,7 @@ scalable = do
                                                                     alloca $ \e'rx_buf ->
                                                                         alloca $ \e'mr_desc ->
                                                                             alloca $ \e'remote_fi_addr ->
+                                                                                alloca $ \e'rx_size -> alloca $ \e'tx_size -> alloca $ \e'rx_mr_size -> alloca $ \e'tx_mr_size -> alloca $ \e'buf_size -> 
                                                                                 alloca $ \e'fab ->
                                                                                     alloca $ \e'eq_attr ->
                                                                                         alloca $ \e'eq ->
@@ -749,8 +756,11 @@ scalable = do
                                                                                                                                                 e'rx_buf
                                                                                                                                                 e'mr_desc
                                                                                                                                                 e'remote_fi_addr
-                                                                                                                                                256
-                                                                                                                                                256
+                                                                                                                                                e'rx_size
+                                                                                                                                                e'tx_size
+                                                                                                                                                e'rx_mr_size
+                                                                                                                                                e'tx_mr_size
+                                                                                                                                                e'buf_size
                                                                                                                                                 e'fab
                                                                                                                                                 e'eq_attr
                                                                                                                                                 e'eq
@@ -1108,7 +1118,7 @@ int ft_open_fabric_res(void)
 }
 -}
 ft_alloc_ep_res env@(Env {..}) = do
-    ft_alloc_msgs |->
+    ft_alloc_msgs env |->
         (do o <- peek opts
             d <- peek domain
             fi_ <- peek fi
@@ -1398,15 +1408,31 @@ static void ft_cntr_set_wait_attr(void)
 	}
 }
 -}
-ft_alloc_msgs = return 0{-
 ft_alloc_msgs env@(Env {..}) = do
     let alignment = 1
+    o <- peek opts
     if ft_check_opts env (1 `shiftL` 12)
         then return 0
         else do
+            if (c'ft_opts'options o) .&. (1 `shiftL` 15)
+                then do
+                    ft_set_tx_rx_sizes_mr env
+                    let rxps = 256 + (ft_rx_prefix_size env)
+                    let txps = 256 + (ft_tx_prefix_size env)
+                    poke rx_size rxps
+                    poke tx_size txps
+                    poke buf_size (rxps + txps)
+                else do
+                    ft_set_tx_rx_sizes env
+                    poke rx_mr_size 0
+                    poke tx_mr_size 0
+                    ts <- peek tx_size
+                    rs <- peek rx_size
+                    poke buf_size ((max ts 256 + max rs 256) * c'ft_opts'window_size o)
             return 0
 
 
+{-
 static int ft_alloc_msgs(void)
 {
 	int ret;
