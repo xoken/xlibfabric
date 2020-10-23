@@ -700,82 +700,86 @@ scalable = do
                                                                     alloca $ \e'rx_buf ->
                                                                         alloca $ \e'mr_desc ->
                                                                             alloca $ \e'remote_fi_addr ->
-                                                                                alloca $ \e'rx_size -> alloca $ \e'tx_size -> alloca $ \e'rx_mr_size -> alloca $ \e'tx_mr_size -> alloca $ \e'buf_size -> 
-                                                                                alloca $ \e'fab ->
-                                                                                    alloca $ \e'eq_attr ->
-                                                                                        alloca $ \e'eq ->
-                                                                                            alloca $ \e'opts ->
-                                                                                                alloca $ \e'node ->
-                                                                                                    alloca $ \e'service ->
-                                                                                                        alloca $ \e'flags ->
-                                                                                                            alloca $ \e'cntr_attr ->
-                                                                                                                alloca $ \e'rxcntr ->
-                                                                                                                    alloca $ \e'txcntr ->
-                                                                                                                        alloca $ \e'waitset -> do
-                                                                                                                            poke
-                                                                                                                                e'eq_attr
-                                                                                                                                (Eq.C'fi_eq_attr
-                                                                                                                                     0
-                                                                                                                                     0
-                                                                                                                                     1
-                                                                                                                                     0
-                                                                                                                                     nullPtr)
-                                                                                                                            h <-
-                                                                                                                                c'fi_allocinfo
-                                                                                                                            if h ==
-                                                                                                                               nullPtr
-                                                                                                                                then print
-                                                                                                                                         "EXIT FAILURE"
-                                                                                                                                else do
-                                                                                                                                    poke
-                                                                                                                                        e'hints
-                                                                                                                                        h
-                                                                                                                                    poke
-                                                                                                                                        e'opts
-                                                                                                                                        init_opts
-                                                                                                                                    let env =
-                                                                                                                                            Env
-                                                                                                                                                2
-                                                                                                                                                0
-                                                                                                                                                e'sep
-                                                                                                                                                e'tx_ep
-                                                                                                                                                e'rx_ep
-                                                                                                                                                e'txcq
-                                                                                                                                                e'rxcq
-                                                                                                                                                e'txcq_array
-                                                                                                                                                e'rxcq_array
-                                                                                                                                                e'remote_rx_addr
-                                                                                                                                                e'cq_attr
-                                                                                                                                                e'av_attr
-                                                                                                                                                e'av
-                                                                                                                                                e'hints
-                                                                                                                                                e'fi
-                                                                                                                                                e'domain
-                                                                                                                                                e'buf
-                                                                                                                                                e'tx_buf
-                                                                                                                                                e'rx_buf
-                                                                                                                                                e'mr_desc
-                                                                                                                                                e'remote_fi_addr
-                                                                                                                                                e'rx_size
-                                                                                                                                                e'tx_size
-                                                                                                                                                e'rx_mr_size
-                                                                                                                                                e'tx_mr_size
-                                                                                                                                                e'buf_size
-                                                                                                                                                e'fab
-                                                                                                                                                e'eq_attr
-                                                                                                                                                e'eq
-                                                                                                                                                e'opts
-                                                                                                                                                e'node
-                                                                                                                                                e'service
-                                                                                                                                                e'flags
-                                                                                                                                                e'cntr_attr
-                                                                                                                                                e'txcntr
-                                                                                                                                                e'rxcntr
-                                                                                                                                                e'waitset
-                                                                                                                                    run
-                                                                                                                                        env >>
-                                                                                                                                        return
-                                                                                                                                            ()
+                                                                                alloca $ \e'rx_size ->
+                                                                                    alloca $ \e'tx_size ->
+                                                                                        alloca $ \e'rx_mr_size ->
+                                                                                            alloca $ \e'tx_mr_size ->
+                                                                                                alloca $ \e'buf_size ->
+                                                                                                    alloca $ \e'fab ->
+                                                                                                        alloca $ \e'eq_attr ->
+                                                                                                            alloca $ \e'eq ->
+                                                                                                                alloca $ \e'opts ->
+                                                                                                                    alloca $ \e'node ->
+                                                                                                                        alloca $ \e'service ->
+                                                                                                                            alloca $ \e'flags ->
+                                                                                                                                alloca $ \e'cntr_attr ->
+                                                                                                                                    alloca $ \e'rxcntr ->
+                                                                                                                                        alloca $ \e'txcntr ->
+                                                                                                                                            alloca $ \e'waitset -> do
+                                                                                                                                                poke
+                                                                                                                                                    e'eq_attr
+                                                                                                                                                    (Eq.C'fi_eq_attr
+                                                                                                                                                         0
+                                                                                                                                                         0
+                                                                                                                                                         1
+                                                                                                                                                         0
+                                                                                                                                                         nullPtr)
+                                                                                                                                                h <-
+                                                                                                                                                    c'fi_allocinfo
+                                                                                                                                                if h ==
+                                                                                                                                                   nullPtr
+                                                                                                                                                    then print
+                                                                                                                                                             "EXIT FAILURE"
+                                                                                                                                                    else do
+                                                                                                                                                        poke
+                                                                                                                                                            e'hints
+                                                                                                                                                            h
+                                                                                                                                                        poke
+                                                                                                                                                            e'opts
+                                                                                                                                                            init_opts
+                                                                                                                                                        let env =
+                                                                                                                                                                Env
+                                                                                                                                                                    2
+                                                                                                                                                                    0
+                                                                                                                                                                    e'sep
+                                                                                                                                                                    e'tx_ep
+                                                                                                                                                                    e'rx_ep
+                                                                                                                                                                    e'txcq
+                                                                                                                                                                    e'rxcq
+                                                                                                                                                                    e'txcq_array
+                                                                                                                                                                    e'rxcq_array
+                                                                                                                                                                    e'remote_rx_addr
+                                                                                                                                                                    e'cq_attr
+                                                                                                                                                                    e'av_attr
+                                                                                                                                                                    e'av
+                                                                                                                                                                    e'hints
+                                                                                                                                                                    e'fi
+                                                                                                                                                                    e'domain
+                                                                                                                                                                    e'buf
+                                                                                                                                                                    e'tx_buf
+                                                                                                                                                                    e'rx_buf
+                                                                                                                                                                    e'mr_desc
+                                                                                                                                                                    e'remote_fi_addr
+                                                                                                                                                                    e'rx_size
+                                                                                                                                                                    e'tx_size
+                                                                                                                                                                    e'rx_mr_size
+                                                                                                                                                                    e'tx_mr_size
+                                                                                                                                                                    e'buf_size
+                                                                                                                                                                    e'fab
+                                                                                                                                                                    e'eq_attr
+                                                                                                                                                                    e'eq
+                                                                                                                                                                    e'opts
+                                                                                                                                                                    e'node
+                                                                                                                                                                    e'service
+                                                                                                                                                                    e'flags
+                                                                                                                                                                    e'cntr_attr
+                                                                                                                                                                    e'txcntr
+                                                                                                                                                                    e'rxcntr
+                                                                                                                                                                    e'waitset
+                                                                                                                                                        run
+                                                                                                                                                            env >>
+                                                                                                                                                            return
+                                                                                                                                                                ()
 
 {- main
 int main(int argc, char **argv)
@@ -819,13 +823,14 @@ int main(int argc, char **argv)
 }
 -}
 -- Utils
-(|->) :: (Integral a, Num b) => IO a -> IO b -> IO b
+(|->) :: (Integral a, Show a, Num b) => IO a -> IO b -> IO b
 a |-> b = do
-    print $ "|-> called"
+    print $ "|-> called "
     a' <- a
+    print a'
     case a' of
-        0 -> return $ fromIntegral a'
-        _ -> b
+        0 -> b
+        _ -> return $ fromIntegral a'
 
 {-
 retNonZero :: (Integral a, Eq a) => IO a -> IO b -> IO b
@@ -1411,10 +1416,10 @@ static void ft_cntr_set_wait_attr(void)
 ft_alloc_msgs env@(Env {..}) = do
     let alignment = 1
     o <- peek opts
-    if ft_check_opts env (1 `shiftL` 12)
+    if ft_check_opts env (1 `shiftL` 12 :: CInt)
         then return 0
         else do
-            if (c'ft_opts'options o) .&. (1 `shiftL` 15)
+            if (c'ft_opts'options o) .&. (1 `shiftL` 15) /= 0
                 then do
                     ft_set_tx_rx_sizes_mr env
                     let rxps = 256 + (ft_rx_prefix_size env)
@@ -1428,10 +1433,18 @@ ft_alloc_msgs env@(Env {..}) = do
                     poke tx_mr_size 0
                     ts <- peek tx_size
                     rs <- peek rx_size
-                    poke buf_size ((max ts 256 + max rs 256) * c'ft_opts'window_size o)
+                    poke buf_size ((max ts 256 + max rs 256) * (fromIntegral $ c'ft_opts'window_size o))
             return 0
 
+ft_check_opts env n = True
 
+ft_set_tx_rx_sizes_mr env = return 0
+
+ft_set_tx_rx_sizes env = return 0
+
+ft_rx_prefix_size env = 0
+
+ft_tx_prefix_size env = 0
 {-
 static int ft_alloc_msgs(void)
 {
